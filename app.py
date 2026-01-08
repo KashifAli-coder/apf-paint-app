@@ -1,3 +1,6 @@
+# ========================================================
+# STEP 1: CONFIGURATION & STYLING
+# ========================================================
 import streamlit as st
 import pandas as pd
 import requests
@@ -6,14 +9,13 @@ from fpdf import FPDF
 import io
 import random
 
-# LINKS & NUMBERS
+# Google Sheets & Payment Info
 SETTINGS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRtyPndRTxFA2DFEiAe7GYsXm16HskK7a40oc02xfwGNuRWTtMgHNrA2aSLZb3K6tTA5sM9Lt_nDc3q/pub?gid=1215788411&single=true&output=csv"
 ORDERS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRtyPndRTxFA2DFEiAe7GYsXm16HskK7a40oc02xfwGNuRWTtMgHNrA2aSLZb3K6tTA5sM9Lt_nDc3q/pub?gid=0&single=true&output=csv"
 SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxJZimOv9kRO-o5Rwftd02VlVzMPhhfRgE_sPQIw_bGra3en-a9Fb491sArBnUv_2H1/exec" 
 JAZZCASH_NO = "03005508112"
 EASYPAISA_NO = "03005508112"
 
-# GLOBAL DESIGN (CSS)
 st.set_page_config(page_title="APF Factory", layout="centered")
 st.markdown("""
 <style>
@@ -28,6 +30,9 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# ========================================================
+# STEP 2: FUNCTIONS (PDF & DATA LOAD)
+# ========================================================
 def generate_pdf(inv_no, name, phone, items_text, total, pay_method, status, format_type="A4"):
     pdf = FPDF(orientation='P', unit='mm', format='A4' if format_type == "A4" else (80, 210))
     pdf.add_page()
@@ -45,8 +50,12 @@ def load_data():
     o = pd.read_csv(f"{ORDERS_URL}&cache={datetime.now().timestamp()}", dtype=str).fillna('0')
     s = pd.read_csv(f"{SETTINGS_URL}&cache={datetime.now().timestamp()}", dtype=str).fillna('0')
     return o, s
+
 orders_df, settings_df = load_data()
 
+# ========================================================
+# STEP 3: LOGIN & REGISTRATION
+# ========================================================
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 
 if not st.session_state.logged_in:
@@ -64,13 +73,16 @@ if not st.session_state.logged_in:
                 st.session_state.logged_in, st.session_state.user_data = True, matched.to_dict()
                 st.session_state.is_admin = (ph_in.endswith("03005508112"))
                 st.rerun()
-            else: st.error("Not Approved or Not Found.")
+            else: st.error("Access Denied: Pending Approval or Not Found.")
     with t2:
         r_ph, r_nm = st.text_input("Mobile*"), st.text_input("Name*")
         if st.button("Register"):
             requests.post(SCRIPT_URL, json={"action":"register","name":r_nm,"phone":"'"+r_ph})
-            st.success("Sent!")
+            st.success("Registration Request Sent!")
 
+# ========================================================
+# STEP 4: USER PROFILE (DASHBOARD)
+# ========================================================
 else:
     menu = st.sidebar.radio("Navigation", ["👤 Profile", "🛍️ Shop", "📜 History"] + (["🔐 Admin"] if st.session_state.get('is_admin') else []))
     if st.sidebar.button("Logout"):
@@ -78,11 +90,11 @@ else:
         st.rerun()
 
     if menu == "👤 Profile":
+        st.markdown(f"<h2 style='text-align:center;'>Dashboard</h2>", unsafe_allow_html=True)
         u_p = st.session_state.user_data['Phone'][-10:]
         u_ords = orders_df[orders_df['Phone'].str.contains(u_p, na=False)]
         points_val = pd.to_numeric(u_ords["Points"], errors="coerce").sum()
         
-        # SIDE-BY-SIDE CARDS
         st.markdown(f"""
         <div style="display: flex; gap: 10px; justify-content: center; width: 100%;">
             <div style="flex: 1; background: white; padding: 15px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border-top: 5px solid #3b82f6; text-align: center;">
@@ -94,7 +106,10 @@ else:
         </div>
         """, unsafe_allow_html=True)
 
-elif menu == "🛍️ Shop":
+# ========================================================
+# STEP 5: SHOP, HISTORY & ADMIN
+# ========================================================
+    elif menu == "🛍️ Shop":
         scat = st.selectbox("Category", settings_df['Category'].unique())
         sprod = st.selectbox("Product", settings_df[settings_df['Category']==scat]['Product Name'])
         prc = float(settings_df[settings_df['Product Name']==sprod]['Price'].values[0])
@@ -102,22 +117,36 @@ elif menu == "🛍️ Shop":
         if st.button("Add to Cart"):
             if 'cart' not in st.session_state: st.session_state.cart = []
             st.session_state.cart.append({"Product":sprod, "Qty":qty, "Total":prc*qty})
+            st.rerun()
         
         if 'cart' in st.session_state and st.session_state.cart:
             total = sum(i['Total'] for i in st.session_state.cart)
             items_str = "\n".join([f"{i['Qty']}x {i['Product']}" for i in st.session_state.cart])
+            st.info(f"Total Bill: Rs. {total}")
             pm = st.radio("Payment", ["COD", "JazzCash", "EasyPaisa"])
             if pm != "COD":
-                st.image(f"https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=Pay-Rs-{total}")
+                acc = JAZZCASH_NO if pm == "JazzCash" else EASYPAISA_NO
+                st.image(f"https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=Pay-to-{acc}-Amount-{total}")
             if st.button("Confirm Order"):
-                requests.post(SCRIPT_URL, json={"action":"order", "name":st.session_state.user_data['Name'], "phone":"'"+st.session_state.user_data['Phone'], "product":items_str, "bill":float(total), "payment_method":pm, "invoice_id": f"APF-{random.randint(100,999)}"})
+                requests.post(SCRIPT_URL, json={"action":"order", "name":st.session_state.user_data['Name'], "phone":"'"+st.session_state.user_data['Phone'], "product":items_str, "bill":float(total), "payment_method":pm, "invoice_id": f"APF-{random.randint(10000,99999)}"})
                 st.session_state.cart = []
-                st.success("Done!")
+                st.success("Order Placed Successfully!")
+
+    elif menu == "📜 History":
+        u_p = st.session_state.user_data['Phone'][-10:]
+        hist = orders_df[orders_df['Phone'].str.contains(u_p, na=False)].iloc[::-1]
+        for _, row in hist.iterrows():
+            st.markdown(f'<div style="background:white; padding:15px; border-radius:10px; margin-bottom:10px; border-left:5px solid #3b82f6;"><b>ID: {row.get("Invoice_ID", "N/A")}</b><br>{row["Product"]}<br><b>Rs. {row["Bill"]}</b></div>', unsafe_allow_html=True)
 
     elif menu == "🔐 Admin":
         active = orders_df[orders_df['Status'].str.contains("Order", na=False)]
+        st.header("Admin Control")
         for idx, row in active.iterrows():
-            with st.expander(f"{row['Name']}"):
-                if st.button("Paid ✅", key=idx):
+            with st.expander(f"{row['Name']} - {row.get('Invoice_ID', 'N/A')}"):
+                c1, c2 = st.columns(2)
+                if c1.button("Paid ✅", key=f"paid_{idx}"):
                     requests.post(SCRIPT_URL, json={"action":"mark_paid","phone":row['Phone'],"product":row['Product']})
+                    st.rerun()
+                if c2.button("Delete 🗑️", key=f"del_{idx}"):
+                    requests.post(SCRIPT_URL, json={"action":"delete_order","phone":row['Phone'],"product":row['Product']})
                     st.rerun()
