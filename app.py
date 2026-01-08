@@ -41,15 +41,50 @@ def generate_pdf(inv_no, name, phone, items_text, total, pay_method, status, for
     if isinstance(pdf_output, str): pdf_output = pdf_output.encode('latin-1')
     return io.BytesIO(pdf_output)
 
-# --- CSS STYLING ---
-st.set_page_config(page_title="APF Factory", layout="centered")
-st.markdown("""<style>
-    .stButton > button { width: 100%; border-radius: 10px; height: 3em; background-color: #3b82f6 !important; color: white !important; font-weight: bold; border: none; }
-    .stat-card { background: white; padding: 15px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-top: 5px solid #3b82f6; text-align: center; }
-    .history-card { background: white; padding: 15px; border-radius: 12px; margin-bottom: 10px; border-left: 5px solid #3b82f6; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-    .pay-box { border: 2px dashed #3b82f6; padding: 15px; border-radius: 12px; background: #eff6ff; text-align: center; margin: 10px 0; }
-    h1, h2, h3 { color: #1e40af; }
-</style>""", unsafe_allow_html=True)
+# --- CSS STYLING (Updated for Force Apply) ---
+st.markdown("""
+<style>
+    /* Main Background */
+    .stApp {
+        background-color: #f0f2f6 !important;
+    }
+    
+    /* Blue Buttons */
+    .stButton > button {
+        width: 100% !important;
+        border-radius: 12px !important;
+        height: 3.5em !important;
+        background: linear-gradient(135deg, #3b82f6, #1e40af) !important;
+        color: white !important;
+        font-weight: bold !important;
+        border: none !important;
+        box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4) !important;
+    }
+
+    /* Stat Cards (Jo aapki screenshot mein hain) */
+    div[data-testid="stMarkdownContainer"] > div.stat-card {
+        background: white !important;
+        padding: 25px !important;
+        border-radius: 20px !important;
+        text-align: center !important;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.1) !important;
+        border-top: 6px solid #3b82f6 !important;
+        margin-bottom: 20px !important;
+    }
+
+    /* Sidebar Design */
+    [data-testid="stSidebar"] {
+        background-color: #ffffff !important;
+        border-right: 1px solid #e0e0e0 !important;
+    }
+
+    /* Welcome Text */
+    h1, h2, h3 {
+        color: #1e40af !important;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 
