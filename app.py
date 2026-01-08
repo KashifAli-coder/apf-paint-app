@@ -10,7 +10,7 @@ import random
 # ================= CONFIGURATION =================
 SETTINGS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRtyPndRTxFA2DFEiAe7GYsXm16HskK7a40oc02xfwGNuRWTtMgHNrA2aSLZb3K6tTA5sM9Lt_nDc3q/pub?gid=1215788411&single=true&output=csv"
 ORDERS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRtyPndRTxFA2DFEiAe7GYsXm16HskK7a40oc02xfwGNuRWTtMgHNrA2aSLZb3K6tTA5sM9Lt_nDc3q/pub?gid=0&single=true&output=csv"
-SCRIPT_URL = "YOUR_APPS_SCRIPT_URL_HERE" 
+SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzgV3p5m3NeAWb-0jkIPfTSy-hLwbPamd2HkTG_MuQ5h-4--ibUrXimayg_wBEFJiPG/exec" 
 
 JAZZCASH_NO = "03005508112"
 EASYPAISA_NO = "03005508112"
