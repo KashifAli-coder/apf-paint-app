@@ -114,43 +114,37 @@ else:
         for k in list(st.session_state.keys()): del st.session_state[k]
         st.rerun()
 
-    # --- 👤 PROFILE SECTION (Forced Template Change) ---
+   # --- 👤 PROFILE SECTION (Side-by-Side Cards Fix) ---
     if menu == "👤 Profile":
-        # Background aur Text ka rang tabdeel karne ke liye
-        st.markdown("""
-            <style>
-                .stApp { background: linear-gradient(to bottom, #f0f2f6, #ffffff) !important; }
-            </style>
-            <h2 style='text-align:center; color:#1e3a8a; font-family:sans-serif;'>APF Factory Dashboard</h2>
-        """, unsafe_allow_html=True)
-
+        st.markdown("<h2 style='text-align:center; color:#1e3a8a;'>APF Factory Dashboard</h2>", unsafe_allow_html=True)
+        
         u_p = st.session_state.user_data['Phone'][-10:]
         u_ords = orders_df[orders_df['Phone'].str.contains(u_p, na=False)]
         points_val = pd.to_numeric(u_ords["Points"], errors="coerce").sum()
         
-        # In Cards ka apna alag design hay (Template se hat kar)
-        c1, c2 = st.columns(2)
-        with c1:
-            st.markdown(f"""
-                <div style="background: white; padding: 20px; border-radius: 20px; 
-                            box-shadow: 0 10px 20px rgba(0,0,0,0.1); border-top: 6px solid #3b82f6; 
-                            text-align: center;">
-                    <span style="font-size: 40px;">📦</span>
-                    <p style="color: #64748b; font-weight: bold; margin: 5px 0;">ORDERS</p>
-                    <h1 style="color: #1e40af; margin: 0;">{len(u_ords)}</h1>
+        # Flexbox Container jo cards ko ek line mein laaye ga
+        st.markdown(f"""
+            <div style="display: flex; gap: 10px; justify-content: center; align-items: stretch;">
+                
+                <div style="flex: 1; background: white; padding: 15px; border-radius: 15px; 
+                            box-shadow: 0 8px 16px rgba(0,0,0,0.08); border-top: 5px solid #3b82f6; 
+                            text-align: center; min-width: 140px;">
+                    <img src="https://cdn-icons-png.flaticon.com/128/2038/2038767.png" width="40">
+                    <p style="color: #64748b; font-size: 12px; font-weight: bold; margin: 5px 0;">ORDERS</p>
+                    <h2 style="color: #1e40af; margin: 0;">{len(u_ords)}</h2>
                 </div>
-            """, unsafe_allow_html=True)
 
-        with c2:
-            st.markdown(f"""
-                <div style="background: white; padding: 20px; border-radius: 20px; 
-                            box-shadow: 0 10px 20px rgba(0,0,0,0.1); border-top: 6px solid #10b981; 
-                            text-align: center;">
-                    <span style="font-size: 40px;">⭐</span>
-                    <p style="color: #64748b; font-weight: bold; margin: 5px 0;">POINTS</p>
-                    <h1 style="color: #1e40af; margin: 0;">{points_val:.0f}</h1>
+                <div style="flex: 1; background: white; padding: 15px; border-radius: 15px; 
+                            box-shadow: 0 8px 16px rgba(0,0,0,0.08); border-top: 5px solid #10b981; 
+                            text-align: center; min-width: 140px;">
+                    <img src="https://cdn-icons-png.flaticon.com/128/1828/1828884.png" width="40">
+                    <p style="color: #64748b; font-size: 12px; font-weight: bold; margin: 5px 0;">POINTS</p>
+                    <h2 style="color: #1e40af; margin: 0;">{points_val:.0f}</h2>
                 </div>
-            """, unsafe_allow_html=True)
+
+            </div>
+        """, unsafe_allow_html=True)
+
     elif menu == "🛍️ Shop":
         st.header("🛒 Order Items")
         if 'cart' not in st.session_state: st.session_state.cart = []
