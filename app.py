@@ -41,50 +41,79 @@ def generate_pdf(inv_no, name, phone, items_text, total, pay_method, status, for
     if isinstance(pdf_output, str): pdf_output = pdf_output.encode('latin-1')
     return io.BytesIO(pdf_output)
 
-# --- CSS STYLING (Updated for Force Apply) ---
+# --- FINAL CSS STYLING (For Sidebar & All Buttons) ---
 st.markdown("""
 <style>
-    /* Main Background */
-    .stApp {
-        background-color: #f0f2f6 !important;
-    }
+    /* Overall Background */
+    .stApp { background-color: #f8f9fa !important; }
     
-    /* Blue Buttons */
-    .stButton > button {
-        width: 100% !important;
-        border-radius: 12px !important;
-        height: 3.5em !important;
+    /* Logout & All Buttons Design */
+    div.stButton > button {
         background: linear-gradient(135deg, #3b82f6, #1e40af) !important;
         color: white !important;
-        font-weight: bold !important;
+        border-radius: 12px !important;
         border: none !important;
-        box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4) !important;
+        padding: 0.5rem 1rem !important;
+        font-weight: bold !important;
+        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3) !important;
+        transition: all 0.3s ease !important;
+    }
+    
+    div.stButton > button:hover {
+        transform: translateY(-2px) !important;
+        box-shadow: 0 6px 15px rgba(59, 130, 246, 0.4) !important;
     }
 
-    /* Stat Cards (Jo aapki screenshot mein hain) */
-    div[data-testid="stMarkdownContainer"] > div.stat-card {
-        background: white !important;
-        padding: 25px !important;
-        border-radius: 20px !important;
-        text-align: center !important;
-        box-shadow: 0 10px 25px rgba(0,0,0,0.1) !important;
-        border-top: 6px solid #3b82f6 !important;
-        margin-bottom: 20px !important;
-    }
-
-    /* Sidebar Design */
+    /* Sidebar Professional Look */
     [data-testid="stSidebar"] {
         background-color: #ffffff !important;
-        border-right: 1px solid #e0e0e0 !important;
+        border-right: 2px solid #e2e8f0 !important;
     }
 
-    /* Welcome Text */
-    h1, h2, h3 {
-        color: #1e40af !important;
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
+    /* Professional Card Structure */
+    .apf-card {
+        background: white;
+        padding: 25px;
+        border-radius: 18px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.06);
+        border-top: 5px solid #3b82f6;
+        text-align: center;
+        margin-bottom: 20px;
+        transition: transform 0.3s ease;
     }
+    .apf-card:hover { transform: scale(1.02); }
+    
+    h1, h2, h3 { color: #1e3a8a !important; font-family: 'Inter', sans-serif !important; }
 </style>
 """, unsafe_allow_html=True)
+
+# --- 👤 PROFILE SECTION ---
+if menu == "👤 Profile":
+    st.markdown(f"<h2 style='text-align:center; padding-bottom:20px;'>Welcome Back, {st.session_state.user_data['Name']}</h2>", unsafe_allow_html=True)
+    
+    u_p = st.session_state.user_data['Phone'].replace("'","").strip()[-10:]
+    u_ords = orders_df[orders_df['Phone'].astype(str).str.contains(u_p, na=False)]
+    total_pts = pd.to_numeric(u_ords["Points"], errors="coerce").sum()
+    
+    # Grid Layout for Cards
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown(f"""
+        <div class="apf-card">
+            <span style="font-size:30px;">📦</span>
+            <p style="margin:5px 0; color:#64748b; font-size:14px; font-weight:bold;">TOTAL ORDERS</p>
+            <h1 style="margin:0; color:#1e40af;">{len(u_ords)}</h1>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with c2:
+        st.markdown(f"""
+        <div class="apf-card">
+            <span style="font-size:30px;">⭐</span>
+            <p style="margin:5px 0; color:#64748b; font-size:14px; font-weight:bold;">REWARD POINTS</p>
+            <h1 style="margin:0; color:#1e40af;">{total_pts:.0f}</h1>
+        </div>
+        """, unsafe_allow_html=True)
 
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 
