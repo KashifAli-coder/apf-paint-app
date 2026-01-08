@@ -107,13 +107,15 @@ else:
         """, unsafe_allow_html=True)
 
 # ========================================================
-# STEP 5: SHOP, HISTORY & ADMIN
+# STEP 5: SHOP, HISTORY & ADMIN (With Logos & PDF)
 # ========================================================
     elif menu == "🛍️ Shop":
+        st.header("🛒 Order Items")
         scat = st.selectbox("Category", settings_df['Category'].unique())
         sprod = st.selectbox("Product", settings_df[settings_df['Category']==scat]['Product Name'])
         prc = float(settings_df[settings_df['Product Name']==sprod]['Price'].values[0])
         qty = st.number_input("Qty", 1)
+        
         if st.button("Add to Cart"):
             if 'cart' not in st.session_state: st.session_state.cart = []
             st.session_state.cart.append({"Product":sprod, "Qty":qty, "Total":prc*qty})
@@ -123,30 +125,53 @@ else:
             total = sum(i['Total'] for i in st.session_state.cart)
             items_str = "\n".join([f"{i['Qty']}x {i['Product']}" for i in st.session_state.cart])
             st.info(f"Total Bill: Rs. {total}")
-            pm = st.radio("Payment", ["COD", "JazzCash", "EasyPaisa"])
+            
+            pm = st.radio("Payment Method", ["COD", "JazzCash", "EasyPaisa"])
+            
             if pm != "COD":
-                acc = JAZZCASH_NO if pm == "JazzCash" else EASYPAISA_NO
-                st.image(f"https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=Pay-to-{acc}-Amount-{total}")
+                acc_no = JAZZCASH_NO if pm == "JazzCash" else EASYPAISA_NO
+                logo_url = "https://upload.wikimedia.org/wikipedia/commons/b/ba/JazzCash_logo.png" if pm == "JazzCash" else "https://upload.wikimedia.org/wikipedia/commons/f/f2/Easypaisa_logo.png"
+                
+                # Payment Card with Logo
+                st.markdown(f"""
+                <div style="background: white; padding: 15px; border-radius: 12px; border: 1px solid #e2e8f0; text-align: center; margin-bottom: 10px;">
+                    <img src="{logo_url}" width="120">
+                    <h3 style="margin: 10px 0; color: #1e3a8a;">{acc_no}</h3>
+                    <p style="font-size: 12px; color: #64748b;">Please pay <b>Rs. {total}</b> to this account</p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                st.image(f"https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=Pay-to-{acc_no}-Amount-{total}", caption="Scan to Pay")
+            
             if st.button("Confirm Order"):
-                requests.post(SCRIPT_URL, json={"action":"order", "name":st.session_state.user_data['Name'], "phone":"'"+st.session_state.user_data['Phone'], "product":items_str, "bill":float(total), "payment_method":pm, "invoice_id": f"APF-{random.randint(10000,99999)}"})
+                inv_id = f"APF-{random.randint(10000,99999)}"
+                requests.post(SCRIPT_URL, json={"action":"order", "name":st.session_state.user_data['Name'], "phone":"'"+st.session_state.user_data['Phone'], "product":items_str, "bill":float(total), "payment_method":pm, "invoice_id": inv_id})
+                st.success(f"Order Placed! ID: {inv_id}")
+                
+                # PDF Download Button
+                pdf_data = generate_pdf(inv_id, st.session_state.user_data['Name'], st.session_state.user_data['Phone'], items_str, total, pm, "PENDING")
+                st.download_button("📥 Download Receipt", pdf_data.getvalue(), f"Receipt_{inv_id}.pdf", "application/pdf")
                 st.session_state.cart = []
-                st.success("Order Placed Successfully!")
 
     elif menu == "📜 History":
+        st.header("Order History")
         u_p = st.session_state.user_data['Phone'][-10:]
         hist = orders_df[orders_df['Phone'].str.contains(u_p, na=False)].iloc[::-1]
         for _, row in hist.iterrows():
-            st.markdown(f'<div style="background:white; padding:15px; border-radius:10px; margin-bottom:10px; border-left:5px solid #3b82f6;"><b>ID: {row.get("Invoice_ID", "N/A")}</b><br>{row["Product"]}<br><b>Rs. {row["Bill"]}</b></div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="background:white; padding:15px; border-radius:10px; margin-bottom:10px; border-left:5px solid #3b82f6; box-shadow: 0 2px 5px rgba(0,0,0,0.05);"><b>ID: {row.get("Invoice_ID", "N/A")}</b><br>{row["Product"]}<br><b>Rs. {row["Bill"]}</b></div>', unsafe_allow_html=True)
 
     elif menu == "🔐 Admin":
         active = orders_df[orders_df['Status'].str.contains("Order", na=False)]
-        st.header("Admin Control")
+        st.header("Admin Control Panel")
         for idx, row in active.iterrows():
-            with st.expander(f"{row['Name']} - {row.get('Invoice_ID', 'N/A')}"):
-                c1, c2 = st.columns(2)
-                if c1.button("Paid ✅", key=f"paid_{idx}"):
+            inv_l = row.get('Invoice_ID', f'ORD-{idx}')
+            with st.expander(f"👤 {row['Name']} - {inv_l}"):
+                c1, c2, c3 = st.columns(3)
+                if c1.button("Paid ✅", key=f"adm_p_{idx}"):
                     requests.post(SCRIPT_URL, json={"action":"mark_paid","phone":row['Phone'],"product":row['Product']})
                     st.rerun()
-                if c2.button("Delete 🗑️", key=f"del_{idx}"):
+                if c2.button("Delete 🗑️", key=f"adm_d_{idx}"):
                     requests.post(SCRIPT_URL, json={"action":"delete_order","phone":row['Phone'],"product":row['Product']})
                     st.rerun()
+                adm_pdf = generate_pdf(inv_l, row['Name'], row['Phone'], row['Product'], row['Bill'], "N/A", "PAID")
+                c3.download_button("📄 PDF", adm_pdf.getvalue(), f"Inv_{inv_l}.pdf", key=f"pdf_{idx}")
