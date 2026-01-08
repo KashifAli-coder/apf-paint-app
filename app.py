@@ -5,119 +5,114 @@ from datetime import datetime
 import urllib.parse
 
 # ================= CONFIGURATION =================
+# Yahan apne Google Sheet ke CSV links aur Apps Script ka URL dalein
 SETTINGS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRtyPndRTxFA2DFEiAe7GYsXm16HskK7a40oc02xfwGNuRWTtMgHNrA2aSLZb3K6tTA5sM9Lt_nDc3q/pub?gid=1215788411&single=true&output=csv"
 ORDERS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRtyPndRTxFA2DFEiAe7GYsXm16HskK7a40oc02xfwGNuRWTtMgHNrA2aSLZb3K6tTA5sM9Lt_nDc3q/pub?gid=0&single=true&output=csv"
 SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyIVWmY0Cj8_S9W-fdwRFWnE6cg7TxTrKqxtvNjSS330krT-VuYtesLcdpD_n5tStXv/exec"
 
 def load_data(url):
     try:
+        # Nocache taake har dafa naya data load ho
         return pd.read_csv(f"{url}&nocache={datetime.now().timestamp()}")
     except:
         return pd.DataFrame()
 
-# Data Load
+# --- DATA LOADING ---
 settings_df = load_data(SETTINGS_URL)
-settings = settings_df.iloc[0] if not settings_df.empty else {}
 orders_df = load_data(ORDERS_URL)
 
-# UI Config
-st.set_page_config(page_title=settings.get('Company_Name', 'APF Factory'), layout="wide")
+# Settings ko dictionary mein convert karna
+if not settings_df.empty:
+    settings = settings_df.iloc[0].fillna('').to_dict()
+else:
+    settings = {'Company_Name': 'APF Factory', 'Admin_Password': '123'}
+
+if orders_df.empty:
+    orders_df = pd.DataFrame(columns=['Date', 'Name', 'Phone', 'Product', 'Bill', 'Points', 'Status'])
+
+# --- UI CONFIG ---
+st.set_page_config(page_title=settings.get('Company_Name'), layout="wide")
+
+# --- SIDEBAR MENU ---
 if settings.get('Logo_URL'):
     st.sidebar.image(settings.get('Logo_URL'), width=120)
 
-# --- INVOICE GENERATOR ---
-def get_invoice(inv_id, name, phone, cart, total, method, type="thermal"):
-    c_name = str(settings.get('Company_Name')).upper()
-    addr = str(settings.get('Address'))
-    terms = str(settings.get('Terms'))
-    dt = datetime.now().strftime('%d-%m-%Y %H:%M')
-    
-    if type == "thermal":
-        res = f"{c_name}\n{addr[:30]}\n{'-'*30}\nINV: #ID-{inv_id}\nDATE: {dt}\nCUST: {name}\nPH: {phone}\n{'-'*30}\nITEM           QTY      TOTAL\n"
-        for i in cart: res += f"{i['Product'][:15]:<15} {i['Qty']:>3} {i['Total']:>10}\n"
-        res += f"{'-'*30}\nTOTAL: Rs. {total}\nPAYMENT: {method}\n{'-'*30}\n{terms[:30]}"
-        return res
-    else:
-        res = f"{'='*60}\n{c_name.center(60)}\n{'='*60}\nAddress: {addr}\nInvoice: #INV-{inv_id} | Date: {dt}\nCustomer: {name} | Phone: {phone}\n{'-'*60}\nSR  PRODUCT                  QTY    PRICE     TOTAL\n{'-'*60}\n"
-        for i, itm in enumerate(cart, 1):
-            res += f"{i:<3} {itm['Product']:25} {itm['Qty']:>3} {itm['Price']:>9} {itm['Total']:>9}\n"
-        res += f"{'-'*60}\nGRAND TOTAL: Rs. {total}\n{'-'*60}\nTerms: {terms}\n{'='*60}"
-        return res
-
-# --- SIDEBAR NAVIGATION ---
-menu = st.sidebar.radio("Menu", ["🛍️ Order Now", "📜 History", "🔐 Admin Dashboard"])
+menu = st.sidebar.radio("Main Menu", ["🛍️ Order Now", "📜 History", "🔐 Admin Dashboard"])
 
 # ---------------- 🛍️ ORDER SECTION ----------------
 if menu == "🛍️ Order Now":
     st.title(f"🎨 {settings.get('Company_Name')}")
-    phone_in = st.text_input("Enter Mobile Number:")
+    phone_in = st.text_input("Apna Mobile Number Likhein:")
 
     if phone_in:
-        user = orders_df[orders_df['Phone'].astype(str) == phone_in] if not orders_df.empty else pd.DataFrame()
+        user = orders_df[orders_df['Phone'].astype(str).str.contains(phone_in)] if not orders_df.empty else pd.DataFrame()
         
         if user.empty:
-            st.warning("Registeration Required!")
-            reg_name = st.text_input("Full Name:")
-            if st.button("Request Registration"):
+            st.warning("Registration Required!")
+            reg_name = st.text_input("Apna Poora Naam Likhein:")
+            if st.button("Register Hone ki Request Bhein"):
                 requests.post(SCRIPT_URL, json={"action": "register", "name": reg_name, "phone": phone_in})
-                st.info("Request Sent! Admin approval ka intezar karein.")
+                st.info("Request bhej di gayi hai! Admin approval ka intezar karein.")
         
         elif user.iloc[-1]['Status'] == "Approved":
             st.success(f"Khush Amdeed {user.iloc[-1]['Name']}!")
             if 'cart' not in st.session_state: st.session_state.cart = []
 
-            # Categories from Sheet
-            c1, c2, c3 = st.columns(3)
-            cat = c1.selectbox("Category", settings_df['Category'].dropna().unique())
-            sub = c2.selectbox("Sub-Category", settings_df[settings_df['Category']==cat]['Sub-Category'].unique())
-            prods = settings_df[(settings_df['Category']==cat) & (settings_df['Sub-Category']==sub)]
-            prod = c3.selectbox("Product", prods['Product Name'].unique())
+            # Category selection
+            available_cats = settings_df['Category'].dropna().unique()
+            c1, c2 = st.columns(2)
+            cat = c1.selectbox("Category", available_cats)
+            
+            # Product selection
+            prods = settings_df[settings_df['Category']==cat]
+            prod = c2.selectbox("Product", prods['Product Name'].unique())
             
             price = prods[prods['Product Name']==prod]['Price'].values[0]
-            qty = st.number_input("Quantity", min_value=1)
+            qty = st.number_input("Quantity", min_value=1, value=1)
             
-            if st.button("Add to Cart ➕"):
+            if st.button("Cart mein Add Karein ➕"):
                 st.session_state.cart.append({"Product": prod, "Qty": qty, "Price": price, "Total": price*qty})
                 st.rerun()
 
             if st.session_state.cart:
-                st.write("### 🛒 Your Cart")
+                st.write("### 🛒 Aapka Cart")
+                total = 0
                 for i, itm in enumerate(st.session_state.cart):
                     col_a, col_b = st.columns([4, 1])
                     col_a.write(f"{itm['Product']} x{itm['Qty']} = Rs.{itm['Total']}")
+                    total += itm['Total']
                     if col_b.button("🗑️", key=f"del_{i}"):
                         st.session_state.cart.pop(i)
                         st.rerun()
                 
                 method = st.radio("Payment", ["COD", "JazzCash", "EasyPaisa"])
-                total = sum(i['Total'] for i in st.session_state.cart)
-                
-                if st.button("Confirm Order & Invoice 🚀"):
-                    inv_id = len(orders_df) + 1
+                if st.button("Confirm Order 🚀"):
                     summary = ", ".join([f"{i['Qty']}x {i['Product']}" for i in st.session_state.cart])
-                    requests.post(SCRIPT_URL, json={"action": "order", "name": user.iloc[-1]['Name'], "phone": phone_in, "product": summary, "bill": float(total), "points": float(total/100)})
-                    
-                    t_inv = get_invoice(inv_id, user.iloc[-1]['Name'], phone_in, st.session_state.cart, total, method, "thermal")
-                    a_inv = get_invoice(inv_id, user.iloc[-1]['Name'], phone_in, st.session_state.cart, total, method, "a4")
-                    
-                    st.code(t_inv)
-                    st.download_button("Download Thermal Receipt", t_inv)
-                    st.download_button("Download A4 Invoice", a_inv)
+                    requests.post(SCRIPT_URL, json={
+                        "action": "order", 
+                        "name": user.iloc[-1]['Name'], 
+                        "phone": phone_in, 
+                        "product": summary, 
+                        "bill": float(total), 
+                        "points": float(total/100)
+                    })
+                    st.success("Order kamyabi se record ho gaya!")
                     st.session_state.cart = []
+                    st.rerun()
         else:
             st.info("Aapka account abhi 'Pending' hai.")
 
 # ---------------- 📜 HISTORY SECTION ----------------
 elif menu == "📜 History":
-    st.header("Search Order History")
-    h_phone = st.text_input("Enter Registered Number:")
+    st.header("Order History")
+    h_phone = st.text_input("Apna Mobile Number Likhein:")
     if h_phone:
-        history = orders_df[orders_df['Phone'].astype(str) == h_phone]
+        history = orders_df[orders_df['Phone'].astype(str).str.contains(h_phone)]
         if not history.empty:
             st.metric("Total Points", f"{history['Points'].sum():.1f}")
             st.dataframe(history[['Date', 'Product', 'Bill', 'Status']].iloc[::-1])
         else:
-            st.error("No record found.")
+            st.error("Koi record nahi mila.")
 
 # ---------------- 🔐 ADMIN SECTION ----------------
 elif menu == "🔐 Admin Dashboard":
@@ -132,7 +127,15 @@ elif menu == "🔐 Admin Dashboard":
                 n_logo = st.text_input("Logo URL", settings.get('Logo_URL'))
                 n_terms = st.text_area("Terms", settings.get('Terms'))
                 if st.form_submit_button("Save Settings"):
-                    requests.post(SCRIPT_URL, json={"action": "update_settings", "company_name": n_name, "address": n_addr, "contact": settings.get('JazzCash_No'), "logo": n_logo, "password": settings.get('Admin_Password'), "terms": n_terms})
+                    requests.post(SCRIPT_URL, json={
+                        "action": "update_settings", 
+                        "company_name": n_name, 
+                        "address": n_addr, 
+                        "contact": settings.get('Contact'), 
+                        "logo": n_logo, 
+                        "password": pw, 
+                        "terms": n_terms
+                    })
                     st.success("Settings Updated!")
         
         with tab2:
@@ -141,9 +144,10 @@ elif menu == "🔐 Admin Dashboard":
                 st.write("### Pending Approvals")
                 to_app = st.selectbox("Select Phone", pending['Phone'].unique())
                 if st.button("Approve Now ✅"):
-                    resp = requests.post(SCRIPT_URL, json={"action": "approve", "phone": to_app})
-                    st.success(f"Approved! WhatsApp Link ready.")
-                    msg = f"Salam {resp.text}! Aapka account approve ho gaya hai."
-                    st.markdown(f'[Send WhatsApp Notification](https://wa.me/92{to_app.lstrip("0")}?text={urllib.parse.quote(msg)})')
+                    requests.post(SCRIPT_URL, json={"action": "approve", "phone": to_app})
+                    st.success(f"Approved!")
+                    st.rerun()
             st.write("### All Data")
             st.dataframe(orders_df)
+    else:
+        st.error("Admin Password darust nahi hai.")
