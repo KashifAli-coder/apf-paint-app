@@ -44,10 +44,11 @@ def generate_pdf(inv_no, name, phone, items_text, total, pay_method, status, for
 # --- CSS STYLING ---
 st.set_page_config(page_title="APF Factory", layout="centered")
 st.markdown("""<style>
-    .stButton > button { width: 100%; border-radius: 10px; height: 3em; background-color: #3b82f6; color: white; font-weight: bold; }
+    .stButton > button { width: 100%; border-radius: 10px; height: 3em; background-color: #3b82f6 !important; color: white !important; font-weight: bold; border: none; }
     .stat-card { background: white; padding: 15px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-top: 5px solid #3b82f6; text-align: center; }
     .history-card { background: white; padding: 15px; border-radius: 12px; margin-bottom: 10px; border-left: 5px solid #3b82f6; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
     .pay-box { border: 2px dashed #3b82f6; padding: 15px; border-radius: 12px; background: #eff6ff; text-align: center; margin: 10px 0; }
+    h1, h2, h3 { color: #1e40af; }
 </style>""", unsafe_allow_html=True)
 
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
@@ -68,26 +69,33 @@ if not st.session_state.logged_in:
         ph_in = st.text_input("Mobile No")
         matched = None
         if ph_in:
-            user_row = orders_df[orders_df['Phone'].str.contains(ph_in.lstrip('0'), na=False)]
+            # Behtar Matching Line Add kar di gayi hay
+            search_num = ph_in.strip()[-10:]
+            user_row = orders_df[orders_df['Phone'].astype(str).str.contains(search_num, na=False)]
             if not user_row.empty:
                 matched = user_row.iloc[0]
                 st.info(f"Welcome Back, {matched['Name']}!")
+        
         if st.button("Sign In"):
-            if matched is not None and "Approved" in matched['Status']:
-                st.session_state.logged_in, st.session_state.user_data = True, matched.to_dict()
-                st.session_state.is_admin = (ph_in == "03005508112")
-                st.rerun()
-            else: st.error("Access Denied.")
+            if matched is not None:
+                if "Approved" in str(matched['Status']):
+                    st.session_state.logged_in, st.session_state.user_data = True, matched.to_dict()
+                    st.session_state.is_admin = (ph_in.strip().endswith("03005508112"))
+                    st.rerun()
+                else:
+                    st.error("Access Denied: Aapka status 'Approved' nahi hay. Admin se rabta karein.")
+            else:
+                st.error("Access Denied: Number register nahi hay.")
     with t2:
-        r_ph = st.text_input("Mobile No*")
+        r_ph = st.text_input("Register Mobile*")
         r_nm = st.text_input("Full Name*")
         if st.button("Register"):
             if r_nm and r_ph:
-                if not orders_df[orders_df['Phone'].str.contains(r_ph.lstrip('0'), na=False)].empty:
+                if not orders_df[orders_df['Phone'].astype(str).str.contains(r_ph.strip()[-10:], na=False)].empty:
                     st.error("Already Registered!")
                 else:
                     requests.post(SCRIPT_URL, json={"action":"register","name":r_nm,"phone":"'"+r_ph})
-                    st.success("Request Sent!")
+                    st.success("Request Sent! Admin ke Approve karne ka intezar karein.")
 
 # --- MAIN DASHBOARD ---
 else:
@@ -99,11 +107,11 @@ else:
     # --- 👤 PROFILE ---
     if menu == "👤 Profile":
         st.header(f"Welcome, {st.session_state.user_data['Name']}")
-        u_p = st.session_state.user_data['Phone'].replace("'","").lstrip('0')
-        u_ords = orders_df[orders_df['Phone'].str.contains(u_p, na=False)]
+        u_p = st.session_state.user_data['Phone'].replace("'","").strip()[-10:]
+        u_ords = orders_df[orders_df['Phone'].astype(str).str.contains(u_p, na=False)]
         c1, c2 = st.columns(2)
         c1.markdown(f'<div class="stat-card"><h3>{len(u_ords)}</h3>Orders</div>', unsafe_allow_html=True)
-        c2.markdown(f'<div class="stat-card"><h3>{u_ords["Points"].astype(float).sum():.0f}</h3>Points</div>', unsafe_allow_html=True)
+        c2.markdown(f'<div class="stat-card"><h3>{pd.to_numeric(u_ords["Points"], errors="coerce").sum():.0f}</h3>Points</div>', unsafe_allow_html=True)
 
     # --- 🛍️ SHOP ---
     elif menu == "🛍️ Shop":
@@ -135,27 +143,26 @@ else:
     # --- 📜 HISTORY ---
     elif menu == "📜 History":
         st.header("Your Orders")
-        u_p = st.session_state.user_data['Phone'].replace("'","").lstrip('0')
-        hist = orders_df[orders_df['Phone'].str.contains(u_p, na=False)].iloc[::-1]
+        u_p = st.session_state.user_data['Phone'].replace("'","").strip()[-10:]
+        hist = orders_df[orders_df['Phone'].astype(str).str.contains(u_p, na=False)].iloc[::-1]
         search_q = st.text_input("Search by Invoice ID")
-        if search_q: hist = hist[hist['Invoice_ID'].str.contains(search_q, case=False)]
+        if search_q: hist = hist[hist['Invoice_ID'].astype(str).str.contains(search_q, case=False)]
         
         for _, row in hist.iterrows():
             st.markdown(f'<div class="history-card"><b>ID: {row.get("Invoice_ID", "N/A")}</b><br>{row["Product"]}<br>Rs. {row["Bill"]} | <i>{row["Status"]}</i></div>', unsafe_allow_html=True)
 
-    # --- 🔐 ADMIN (Search + Summary Features) ---
+    # --- 🔐 ADMIN ---
     elif menu == "🔐 Admin":
-        active = orders_df[orders_df['Status'].str.contains("Order", na=False)]
+        active = orders_df[orders_df['Status'].astype(str).str.contains("Order", na=False)]
         st.header("Admin Dashboard")
         
-        # Sales Summary
         c1, c2 = st.columns(2)
         c1.metric("Pending Orders", len(active))
-        c2.metric("Total Sales", f"Rs. {active['Bill'].astype(float).sum():,.0f}")
+        c2.metric("Total Sales", f"Rs. {pd.to_numeric(active['Bill'], errors='coerce').sum():,.0f}")
         
         st.markdown("---")
         search_adm = st.text_input("Search Customer Name or ID")
-        if search_adm: active = active[active['Name'].str.contains(search_adm, case=False) | active['Invoice_ID'].str.contains(search_adm, case=False)]
+        if search_adm: active = active[active['Name'].str.contains(search_adm, case=False) | active['Invoice_ID'].astype(str).str.contains(search_adm, case=False)]
         
         for idx, row in active.iterrows():
             inv_l = row.get('Invoice_ID', f'ORD_{idx}')
