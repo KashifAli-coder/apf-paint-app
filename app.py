@@ -6,7 +6,7 @@ from datetime import datetime
 # ================= CONFIGURATION (LATEST LINKS APPLIED) =================
 SETTINGS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRtyPndRTxFA2DFEiAe7GYsXm16HskK7a40oc02xfwGNuRWTtMgHNrA2aSLZb3K6tTA5sM9Lt_nDc3q/pub?gid=1215788411&single=true&output=csv"
 ORDERS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRtyPndRTxFA2DFEiAe7GYsXm16HskK7a40oc02xfwGNuRWTtMgHNrA2aSLZb3K6tTA5sM9Lt_nDc3q/pub?gid=0&single=true&output=csv"
-SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyIVWmY0Cj8_S9W-fdwRFWnE6cg7TxTrKqxtvNjSS330krT-VuYtesLcdpD_n5tStXv/exec"
+SCRIPT_URL = "https://script.google.com/macros/s/AKfycbygqdsOhyFhMIQBhaXGazux_0O1hYJZ_ozSN_L8PGjU3XvHo7epYHIRcF4b1DPAwZje/exec"
 
 def load_data(url):
     try:
