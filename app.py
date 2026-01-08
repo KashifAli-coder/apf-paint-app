@@ -2,152 +2,123 @@ import streamlit as st
 import pandas as pd
 import requests
 from datetime import datetime
+import urllib.parse
+from fpdf import FPDF
+import io
 
-# ================= CONFIGURATION (LATEST LINKS APPLIED) =================
+# --- CONFIG ---
 SETTINGS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRtyPndRTxFA2DFEiAe7GYsXm16HskK7a40oc02xfwGNuRWTtMgHNrA2aSLZb3K6tTA5sM9Lt_nDc3q/pub?gid=1215788411&single=true&output=csv"
 ORDERS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRtyPndRTxFA2DFEiAe7GYsXm16HskK7a40oc02xfwGNuRWTtMgHNrA2aSLZb3K6tTA5sM9Lt_nDc3q/pub?gid=0&single=true&output=csv"
-SCRIPT_URL = "https://script.google.com/macros/s/AKfycbygqdsOhyFhMIQBhaXGazux_0O1hYJZ_ozSN_L8PGjU3XvHo7epYHIRcF4b1DPAwZje/exec"
+SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyIVWmY0Cj8_S9W-fdwRFWnE6cg7TxTrKqxtvNjSS330krT-VuYtesLcdpD_n5tStXv/exec"
+ADMIN_WHATSAPP = "923005508112"
 
-def load_data(url):
-    try:
-        # Nocache ensures fresh data on every load
-        return pd.read_csv(f"{url}&nocache={datetime.now().timestamp()}")
-    except Exception as e:
-        return pd.DataFrame()
+# --- PDF GENERATOR ---
+def generate_pdf(name, phone, items_text, total, format_type="A4"):
+    # A4 size ya Thermal (80mm) size
+    pdf = FPDF(orientation='P', unit='mm', format='A4' if format_type=="A4" else (80, 150))
+    pdf.add_page()
+    pdf.set_font("Arial", 'B', 14 if format_type=="A4" else 10)
+    pdf.cell(0, 10, "APF PAINT FACTORY INVOICE", ln=True, align='C')
+    pdf.set_font("Arial", size=10 if format_type=="A4" else 8)
+    pdf.cell(0, 7, f"Customer: {name}", ln=True)
+    pdf.cell(0, 7, f"Phone: {phone}", ln=True)
+    pdf.cell(0, 7, f"Date: {datetime.now().strftime('%d-%m-%Y')}", ln=True)
+    pdf.ln(5)
+    pdf.multi_cell(0, 7, f"Order Details:\n{items_text}")
+    pdf.ln(5)
+    pdf.set_font("Arial", 'B', 12 if format_type=="A4" else 9)
+    pdf.cell(0, 10, f"TOTAL BILL: Rs. {total}", ln=True)
+    return pdf.output()
 
-# --- DATA LOADING ---
-settings_df = load_data(SETTINGS_URL)
-orders_df = load_data(ORDERS_URL)
+def send_wa(num, msg):
+    num = "92" + num.replace("'","").lstrip('0')
+    return f"https://wa.me/{num}?text={urllib.parse.quote(msg)}"
 
-# Settings processing
-if not settings_df.empty:
-    # Taking row 2 (index 0) as settings
-    settings = settings_df.iloc[0].fillna('').to_dict()
+# --- APP START ---
+st.set_page_config(page_title="APF Factory", layout="wide")
+orders_df = pd.read_csv(f"{ORDERS_URL}&cache={datetime.now().timestamp()}", dtype={'Phone': str}).fillna('')
+settings_df = pd.read_csv(f"{SETTINGS_URL}&cache={datetime.now().timestamp()}").fillna('')
+settings = settings_df.iloc[0].to_dict() if not settings_df.empty else {"Admin_Password": "123"}
+
+if "logged_in" not in st.session_state: st.session_state.logged_in = False
+
+# --- LOGIN ---
+if not st.session_state.logged_in:
+    st.title("🔐 APF Login")
+    phone_input = st.text_input("Mobile Number:")
+    if st.button("Login"):
+        clean_p = phone_input.lstrip('0')
+        user = orders_df[orders_df['Phone'].str.contains(clean_p, na=False)]
+        if not user.empty and "Approved" in user['Status'].values:
+            st.session_state.logged_in, st.session_state.user_data = True, user.iloc[0].to_dict()
+            st.rerun()
+        else: st.error("Account Pending ya Not Found.")
+
+# --- DASHBOARD ---
 else:
-    settings = {'Company_Name': 'APF Factory', 'Admin_Password': '123'}
+    menu = st.sidebar.radio("Menu", ["👤 My Profile", "🛍️ Order Now", "🔐 Admin Dashboard"])
+    
+    if menu == "👤 My Profile":
+        st.header(f"Welcome, {st.session_state.user_data['Name']}")
+        u_p = st.session_state.user_data['Phone'].replace("'","").lstrip('0')
+        u_orders = orders_df[orders_df['Phone'].str.contains(u_p, na=False)]
+        c1, c2 = st.columns(2)
+        c1.metric("Points", f"{u_orders['Points'].astype(float).sum():.1f}")
+        c2.metric("Total Orders", len(u_orders))
+        if st.sidebar.button("Logout"): 
+            st.session_state.logged_in = False
+            st.rerun()
 
-if orders_df.empty:
-    orders_df = pd.DataFrame(columns=['Date', 'Name', 'Phone', 'Product', 'Bill', 'Points', 'Status'])
-else:
-    orders_df = orders_df.dropna(how='all')
-
-# --- UI CONFIG ---
-st.set_page_config(page_title=settings.get('Company_Name', 'APF Factory'), layout="wide")
-
-# --- SIDEBAR MENU ---
-if settings.get('Logo_URL'):
-    st.sidebar.image(settings.get('Logo_URL'), width=120)
-
-menu = st.sidebar.radio("Main Menu", ["🛍️ Order Now", "📜 History", "🔐 Admin Dashboard"])
-
-# ---------------- 🛍️ ORDER SECTION ----------------
-if menu == "🛍️ Order Now":
-    st.title(f"🎨 {settings.get('Company_Name', 'APF Paint Factory')}")
-    phone_in = st.text_input("Apna Mobile Number Likhein:")
-
-    if phone_in:
-        # Check if user exists
-        user = orders_df[orders_df['Phone'].astype(str).str.contains(phone_in)] if not orders_df.empty else pd.DataFrame()
+    elif menu == "🛍️ Order Now":
+        st.header("Place New Order")
+        if 'cart' not in st.session_state: st.session_state.cart = []
         
-        if user.empty:
-            st.warning("Aap registered nahi hain!")
-            reg_name = st.text_input("Apna Poora Naam Likhein:")
-            if st.button("Registration Request Bhein"):
-                requests.post(SCRIPT_URL, json={"action": "register", "name": reg_name, "phone": phone_in})
-                st.info("Request bhej di gayi hai! Admin approval ka intezar karein.")
-        
-        elif user.iloc[-1]['Status'] == "Approved":
-            st.success(f"Khush Amdeed {user.iloc[-1]['Name']}!")
-            if 'cart' not in st.session_state: st.session_state.cart = []
-
-            # Product Selection using your exact Column Names
-            c1, c2 = st.columns(2)
-            available_cats = settings_df['Category'].dropna().unique()
+        cats = settings_df['Category'].dropna().unique()
+        if len(cats) > 0:
+            col1, col2 = st.columns(2)
+            sel_cat = col1.selectbox("Category", cats)
+            prods = settings_df[settings_df['Category'] == sel_cat]
+            sel_prod = col2.selectbox("Product", prods['Product Name'].unique())
+            price = prods[prods['Product Name'] == sel_prod]['Price'].values[0]
+            qty = st.number_input("Quantity", min_value=1, step=1)
             
-            if len(available_cats) > 0:
-                cat = c1.selectbox("Category Chunein", available_cats)
-                prod_list = settings_df[settings_df['Category'] == cat]
-                prod = c2.selectbox("Product Chunein", prod_list['Product Name'].unique())
-                
-                # Fetching price from 'Price' column
-                price_val = prod_list[prod_list['Product Name'] == prod]['Price'].values[0]
-                qty = st.number_input("Quantity", min_value=1, value=1)
-                
-                if st.button("Cart mein Add Karein ➕"):
-                    st.session_state.cart.append({"Product": prod, "Qty": qty, "Price": price_val, "Total": price_val * qty})
-                    st.rerun()
+            if st.button("Add to Cart ➕"):
+                st.session_state.cart.append({"Product": sel_prod, "Qty": qty, "Price": price, "Total": price*qty})
+                st.rerun()
 
-            # Cart Display
-            if st.session_state.cart:
-                st.write("### 🛒 Aapka Cart")
-                total_bill = 0
-                for i, itm in enumerate(st.session_state.cart):
-                    st.write(f"{itm['Product']} - {itm['Qty']} x {itm['Price']} = Rs. {itm['Total']}")
-                    total_bill += itm['Total']
-                
-                method = st.radio("Payment Method", ["Cash on Delivery", "JazzCash", "EasyPaisa"])
-                if st.button("Order Confirm Karein 🚀"):
-                    summary = ", ".join([f"{i['Qty']}x {i['Product']}" for i in st.session_state.cart])
-                    requests.post(SCRIPT_URL, json={
-                        "action": "order", 
-                        "name": user.iloc[-1]['Name'], 
-                        "phone": phone_in, 
-                        "product": summary, 
-                        "bill": float(total_bill), 
-                        "points": float(total_bill/100)
-                    })
-                    st.success("Order kamyabi se record ho gaya!")
-                    st.session_state.cart = []
-                    st.rerun()
-        else:
-            st.info("Aapka account abhi 'Pending' hai. Admin approval ka intezar karein.")
+        if st.session_state.cart:
+            st.write("### Cart Summary")
+            bill = sum(i['Total'] for i in st.session_state.cart)
+            items_str = "\n".join([f"{i['Qty']}x {i['Product']} = {i['Total']}" for i in st.session_state.cart])
+            st.text(items_str)
+            st.write(f"*Total: Rs. {bill}*")
+            
+            if st.button("Confirm Order & Get Receipt"):
+                requests.post(SCRIPT_URL, json={"action": "order", "name": st.session_state.user_data['Name'], "phone": "'" + st.session_state.user_data['Phone'], "product": items_str.replace("\n", ", "), "bill": float(bill), "points": float(bill/100)})
+                st.success("Order Saved!")
+                # Customer Receipt
+                pdf_bytes = generate_pdf(st.session_state.user_data['Name'], st.session_state.user_data['Phone'], items_str, bill, "Thermal")
+                st.download_button("Download Receipt (Thermal) 📄", pdf_bytes, "receipt.pdf", "application/pdf")
+                st.session_state.cart = []
 
-# ---------------- 📜 HISTORY SECTION ----------------
-elif menu == "📜 History":
-    st.header("Order History")
-    h_phone = st.text_input("Mobile Number Likhein:")
-    if h_phone:
-        history = orders_df[orders_df['Phone'].astype(str).str.contains(h_phone)]
-        if not history.empty:
-            st.metric("Aapke Total Points", f"{history['Points'].sum():.1f}")
-            st.dataframe(history[['Date', 'Product', 'Bill', 'Status']].iloc[::-1])
-        else:
-            st.error("Is number par koi record nahi mila.")
-
-# ---------------- 🔐 ADMIN SECTION ----------------
-elif menu == "🔐 Admin Dashboard":
-    pw = st.sidebar.text_input("Password", type="password")
-    if pw == str(settings.get('Admin_Password')):
-        tab1, tab2 = st.tabs(["⚙️ Settings", "📊 Orders & Approval"])
-        
-        with tab1:
-            with st.form("admin_settings"):
-                n_name = st.text_input("Factory Name", settings.get('Company_Name'))
-                n_addr = st.text_input("Address", settings.get('Address'))
-                n_logo = st.text_input("Logo URL", settings.get('Logo_URL'))
-                n_terms = st.text_area("Terms", settings.get('Terms'))
-                if st.form_submit_button("Save All Settings"):
-                    requests.post(SCRIPT_URL, json={
-                        "action": "update_settings", 
-                        "company_name": n_name, 
-                        "address": n_addr, 
-                        "contact": settings.get('Contact', ''), 
-                        "logo": n_logo, 
-                        "password": pw, 
-                        "terms": n_terms
-                    })
-                    st.success("Settings Update ho gayi hain!")
-        
-        with tab2:
-            pending = orders_df[orders_df['Status'] == "Pending"]
-            if not pending.empty:
-                st.write("### Pending Approvals")
-                to_app = st.selectbox("Select Number", pending['Phone'].unique())
-                if st.button("Approve Kar Dein ✅"):
-                    requests.post(SCRIPT_URL, json={"action": "approve", "phone": to_app})
-                    st.success(f"Number {to_app} Approved!")
-                    st.rerun()
-            st.write("### All Orders Data")
-            st.dataframe(orders_df)
-    else:
-        st.error("Ghalat Password!")
+    elif menu == "🔐 Admin Dashboard":
+        pw = st.sidebar.text_input("Master Password", type="password")
+        if pw == str(settings.get('Admin_Password')):
+            st.header("Admin Control Panel")
+            unpaid = orders_df[orders_df['Status'].str.contains("Order")]
+            if not unpaid.empty:
+                for idx, row in unpaid.iterrows():
+                    with st.expander(f"Order: {row['Name']} - Rs.{row['Bill']}"):
+                        c1, c2, c3 = st.columns(3)
+                        if c1.button("Mark Paid ✅", key=f"p_{idx}"):
+                            requests.post(SCRIPT_URL, json={"action": "mark_paid", "phone": row['Phone'], "product": row['Product']})
+                            wa_m = f"Assalam-o-Alaikum {row['Name']}! Aapki payment Rs.{row['Bill']} receive ho gayi hai. Shukria!"
+                            st.markdown(f"[Send WA Receipt]({send_wa(row['Phone'], wa_m)})")
+                            st.rerun()
+                        # Admin options for both formats
+                        pdf_a4 = generate_pdf(row['Name'], row['Phone'], row['Product'], row['Bill'], "A4")
+                        c2.download_button("Download A4", pdf_a4, f"A4_{idx}.pdf", key=f"a4_{idx}")
+                        pdf_th = generate_pdf(row['Name'], row['Phone'], row['Product'], row['Bill'], "Thermal")
+                        c3.download_button("Download Thermal", pdf_th, f"TH_{idx}.pdf", key=f"th_{idx}")
+            else: st.info("No pending payments.")
+        else: st.warning("Admin password required.")
