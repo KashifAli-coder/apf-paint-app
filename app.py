@@ -139,14 +139,16 @@ else:
         for k in list(st.session_state.keys()): del st.session_state[k]
         st.rerun()
 
-    # --- 👤 PROFILE ---
+    # --- 👤 PROFILE (Updated HTML) ---
     if menu == "👤 Profile":
-        st.header(f"Welcome, {st.session_state.user_data['Name']}")
+        st.markdown(f"<h2 style='text-align:center;'>Welcome, {st.session_state.user_data['Name']}</h2>", unsafe_allow_html=True)
         u_p = st.session_state.user_data['Phone'].replace("'","").strip()[-10:]
         u_ords = orders_df[orders_df['Phone'].astype(str).str.contains(u_p, na=False)]
+        
         c1, c2 = st.columns(2)
-        c1.markdown(f'<div class="stat-card"><h3>{len(u_ords)}</h3>Orders</div>', unsafe_allow_html=True)
-        c2.markdown(f'<div class="stat-card"><h3>{pd.to_numeric(u_ords["Points"], errors="coerce").sum():.0f}</h3>Points</div>', unsafe_allow_html=True)
+        # Yahan 'stat-card' class ka use lazmi hai design ke liye
+        c1.markdown(f'<div class="stat-card"><h3>{len(u_ords)}</h3><p>Orders</p></div>', unsafe_allow_html=True)
+        c2.markdown(f'<div class="stat-card"><h3>{pd.to_numeric(u_ords["Points"], errors="coerce").sum():.0f}</h3><p>Points</p></div>', unsafe_allow_html=True)
 
     # --- 🛍️ SHOP ---
     elif menu == "🛍️ Shop":
