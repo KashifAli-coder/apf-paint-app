@@ -34,69 +34,67 @@ if 'logged_in' not in st.session_state:
     st.session_state.update({'logged_in': False, 'user_data': {}, 'cart': [], 'edit_idx': None})
 
 # ========================================================
-# STEP 4: LOGIN & REGISTER (Final Stable Version)
+# STEP 4: LOGIN & REGISTER (The Secure Way)
 # ========================================================
 if not st.session_state.logged_in:
     tab1, tab2 = st.tabs(["🔐 Login", "📝 Register"])
 
     with tab1:
         st.subheader("Login to your Account")
-        ph_l = st.text_input("Phone Number", key="l_ph")
-        pw_l = st.text_input("Password", type="password", key="l_pw")
+        ph_l = st.text_input("Phone Number", key="l_ph").strip()
+        pw_l = st.text_input("Password", type="password", key="l_pw").strip()
         
         if st.button("Login 🚀", use_container_width=True):
-            # 1. Khali cells ko safely handle karna
+            # 1. Fresh Data Load aur Khali Cells ko khatam karna
             temp_df = users_df.copy()
-            temp_df = temp_df.fillna('') 
+            temp_df = temp_df.fillna('')
             
-            # 2. Simple comparison (Bina complex functions ke)
-            # Hum check kar rahe hain ke phone aur password match hotay hain ya nahi
-            match = temp_df[(temp_df['Phone'].astype(str) == str(ph_l)) & 
-                            (temp_df['Password'].astype(str) == str(pw_l))]
+            # 2. Columns ke naam se spaces khatam karna (Common Error Fix)
+            temp_df.columns = temp_df.columns.str.strip()
+            
+            # 3. Data ko String bana kar match karna
+            # Hum check kar rahe hain ke input aur sheet ka data match ho
+            check_ph = temp_df['Phone'].astype(str).str.strip() == str(ph_l)
+            check_pw = temp_df['Password'].astype(str).str.strip() == str(pw_l)
+            
+            match = temp_df[check_ph & check_pw]
             
             if not match.empty:
-                # User mil gaya, ab Role check karein
                 user_row = match.iloc[0]
-                user_role = str(user_row['Role']).lower().strip()
+                user_role = str(user_row['Role']).strip().lower()
                 
                 if user_role == 'pending' or user_role == '':
                     st.warning("⏳ Apki dakhust per Amal ho Raha hay account k verify hony ka intizar Karin thanks")
                 else:
                     st.session_state.logged_in = True
                     st.session_state.user_data = user_row.to_dict()
-                    # Admin number check
+                    # Admin check (Phone match)
                     st.session_state.is_admin = (str(ph_l) == "03005508112")
-                    st.success("Login Kamyab!")
+                    st.success("Welcome! Login Kamyab.")
                     st.rerun()
             else: 
+                # Diagnostic Help: Agar login na ho to check karein sheet mein data hai ya nahi
                 st.error("Ghalat Phone ya Password!")
+                if st.checkbox("Debug: Show Users List (Sirf Testing ke liye)"):
+                    st.write(temp_df[['Phone', 'Password', 'Role']])
 
     with tab2:
         st.subheader("Create New Account")
         r_name = st.text_input("Full Name")
-        r_ph = st.text_input("Phone Number (Login ID)")
+        r_ph = st.text_input("Phone Number")
         r_pw = st.text_input("Create Password", type="password")
         
         if st.button("Register Now ✨", use_container_width=True):
             if r_name and r_ph and r_pw:
-                already = users_df[users_df['Phone'].astype(str) == str(r_ph)]
+                already = users_df[users_df['Phone'].astype(str).str.strip() == str(r_ph).strip()]
                 if not already.empty:
-                    st.error("Ye number pehle se registered hai!")
+                    st.error("Ye number pehle se majood hai!")
                 else:
-                    try:
-                        requests.post(SCRIPT_URL, json={
-                            "action": "register",
-                            "name": r_name,
-                            "phone": r_ph,
-                            "password": r_pw
-                        })
-                        st.success("✅ Apki dakhust per Amal ho Raha hay account k verify hony ka intizar Karin thanks")
-                        st.balloons()
-                    except:
-                        st.error("Connection Error!")
+                    requests.post(SCRIPT_URL, json={"action":"register", "name":r_name, "phone":r_ph, "password":r_pw})
+                    st.success("✅ Registration Successful! Admin approval ka intizar karein.")
+                    st.balloons()
             else:
-                st.warning("Tamam khali jagah pur karein.")
-    
+                st.warning("Tamam fields pur karein.")
     st.stop()
 
 # ========================================================
