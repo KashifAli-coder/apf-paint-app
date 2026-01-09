@@ -1,166 +1,187 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
 import requests
+from datetime import datetime
 from io import BytesIO
 from reportlab.pdfgen import canvas
 
-# ==========================================
-# STEP 1: CONFIGURATION & DATA FETCHING
-# ==========================================
-# Google Sheets & Payment Info
-SETTINGS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRtyPndRTxFA2DFEiAe7GYsXm16HskK7a40oc02xfwGNuRWTtMgHNrA2aSLZb3K6tTA5sM9Lt_nDc3q/pub?gid=1215788411&single=true&output=csv"
-ORDERS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRtyPndRTxFA2DFEiAe7GYsXm16HskK7a40oc02xfwGNuRWTtMgHNrA2aSLZb3K6tTA5sM9Lt_nDc3q/pub?gid=0&single=true&output=csv"
-SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxvtcxSnzQ11cCpkEQbb7-wvacH6LYjw7XldVfxORmgFpooxk4UKBsKFYZNueKhTWLe/exec" 
+# ========================================================
+# STEP 1: CONFIGURATION & LINKS
+# ========================================================
+SHEET_ID = ""
+SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwr65rLmMBi8gMtIT6JAeHbD4keI7Er_05EKlJdUOmVh7WKzTwoZ37-Pxii96XCcYo/exec"
 JAZZCASH_NO = "03005508112"
 EASYPAISA_NO = "03005508112"
 
-# Data Fetching (Assuming CSV or API)
+# ========================================================
+# STEP 2: DATA FETCHING (4 Tables from 1 Sheet)
+# ========================================================
 @st.cache_data(ttl=60)
-def load_data():
-    # Yahan aapki sheets se data load hoga
-    users_df = pd.read_csv("users.csv") # Example
-    settings_df = pd.read_csv("settings.csv") # Example
-    orders_df = pd.read_csv("orders.csv") # Example
-    return users_df, settings_df, orders_df
+def load_all_data():
+    base = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet="
+    u_df = pd.read_csv(base + "Users")
+    s_df = pd.read_csv(base + "Settings")
+    o_df = pd.read_csv(base + "Orders")
+    f_df = pd.read_csv(base + "Feedback")
+    return u_df, s_df, o_df, f_df
 
-users_df, settings_df, orders_df = load_data()
+users_df, settings_df, orders_df, feedback_df = load_all_data()
 
-# ==========================================
-# STEP 2: SESSION & LOGIN LOGIC
-# ==========================================
+# ========================================================
+# STEP 3: SESSION STATE INITIALIZATION
+# ========================================================
 if 'logged_in' not in st.session_state:
-    st.session_state.logged_in = False
+    st.session_state.update({'logged_in': False, 'user_data': {}, 'cart': [], 'edit_idx': None})
 
+# ========================================================
+# STEP 4: LOGIN LOGIC
+# ========================================================
 if not st.session_state.logged_in:
-    st.header("🔐 Login")
-    phone = st.text_input("Phone Number")
+    st.header("🔐 APF Login")
+    ph = st.text_input("Phone Number")
     pw = st.text_input("Password", type="password")
     if st.button("Login", use_container_width=True):
-        user = users_df[(users_df['Phone'] == phone) & (users_df['Password'] == pw)]
+        user = users_df[(users_df['Phone'].astype(str) == ph) & (users_df['Password'].astype(str) == pw)]
         if not user.empty:
             st.session_state.logged_in = True
             st.session_state.user_data = user.iloc[0].to_dict()
-            st.session_state.is_admin = (phone == "03005508112")
-            st.session_state.cart = []
+            st.session_state.is_admin = (ph == "03005508112")
             st.rerun()
-        else:
-            st.error("Ghalat Details!")
     st.stop()
 
-# ==========================================
-# STEP 3: SIDEBAR NAVIGATION
-# ==========================================
+# ========================================================
+# STEP 5: SIDEBAR & LOGOUT
+# ========================================================
 else:
-    u_name = st.session_state.user_data.get('Name', 'User')
-    st.sidebar.success(f"👤 Welcome: {u_name}")
-    
-    menu = st.sidebar.radio("Navigation", ["👤 Profile", "🛍️ New Order", "📜 History", "🔐 Admin"] if st.session_state.is_admin else ["👤 Profile", "🛍️ New Order", "📜 History"])
-    
+    u_name = st.session_state.user_data['Name']
+    st.sidebar.success(f"👤 {u_name}")
+    nav = ["👤 Profile", "🛍️ New Order", "📜 History", "💬 Feedback"]
+    if st.session_state.is_admin: nav.append("🔐 Admin")
+    menu = st.sidebar.radio("Navigation", nav)
     if st.sidebar.button("Logout 🚪", use_container_width=True):
-        for k in list(st.session_state.keys()): del st.session_state[k]
+        st.session_state.clear()
         st.rerun()
 
-# ==========================================
-# STEP 4: USER DASHBOARD (PROFILE)
-# ==========================================
+# ========================================================
+# STEP 6: USER PROFILE DASHBOARD
+# ========================================================
     if menu == "👤 Profile":
         st.header(f"👋 Welcome, {u_name}")
-        st.subheader("Your Dashboard")
-        c1, c2 = st.columns(2)
-        c1.metric("Phone", st.session_state.user_data['Phone'])
-        c2.metric("Orders", len(orders_df[orders_df['Phone']==st.session_state.user_data['Phone']]))
+        st.metric("Phone", st.session_state.user_data['Phone'])
+        st.info("Select 'New Order' from Sidebar to shop.")
 
-# ==========================================
-# STEP 5: NEW ORDER (CART & INLINE TABLE)
-# ==========================================
+# ========================================================
+# STEP 7: ORDER - PRODUCT SELECTION
+# ========================================================
     elif menu == "🛍️ New Order":
         st.header("🛒 Create New Order")
+        scat = st.selectbox("Category", settings_df['Category'].unique())
+        sprod = st.selectbox("Product", settings_df[settings_df['Category']==scat]['Product Name'])
+        prc = float(settings_df[settings_df['Product Name']==sprod]['Price'].values[0])
         
-        # Product Selection
-        cat = st.selectbox("Category", settings_df['Category'].unique())
-        prod = st.selectbox("Product", settings_df[settings_df['Category']==cat]['Product Name'])
-        price = float(settings_df[settings_df['Product Name']==prod]['Price'].values[0])
+        dq = st.session_state.cart[st.session_state.edit_idx]['Qty'] if st.session_state.edit_idx is not None else 1
+        qty = st.number_input("Quantity", min_value=1, value=dq)
         
-        if 'e_idx' not in st.session_state: st.session_state.e_idx = None
-        def_q = st.session_state.cart[st.session_state.e_idx]['Qty'] if st.session_state.e_idx is not None else 1
-        qty = st.number_input("Quantity", min_value=1, value=def_q)
-        
-        if st.button("Add to Cart ➕" if st.session_state.e_idx is None else "Update Item ✏️", use_container_width=True):
-            item = {"Product": prod, "Qty": qty, "Total": price * qty, "Price": price}
-            if st.session_state.e_idx is not None:
-                st.session_state.cart[st.session_state.e_idx] = item
-                st.session_state.e_idx = None
-            else:
-                st.session_state.cart.append(item)
+        if st.button("Update Item ✏️" if st.session_state.edit_idx is not None else "Add to Cart ➕", use_container_width=True):
+            item = {"Product": sprod, "Qty": qty, "Price": prc, "Total": prc * qty}
+            if st.session_state.edit_idx is not None:
+                st.session_state.cart[st.session_state.edit_idx] = item
+                st.session_state.edit_idx = None
+            else: st.session_state.cart.append(item)
             st.rerun()
 
-        # Original Table Design (No Blue Boxes, Inline Icons)
+# ========================================================
+# STEP 8: ORDER - REVIEW TABLE (Original Design)
+# ========================================================
         if st.session_state.cart:
-            st.markdown("### 📋 Review Items")
-            st.markdown('<div style="background:#3b82f6; color:white; padding:10px; border-radius:5px; display:flex; justify-content:space-between; font-weight:bold; font-size:14px;"><span>Product (Qty)</span><span>Total</span><span>Actions</span></div>', unsafe_allow_html=True)
-
+            st.markdown("### 📋 Review Cart")
+            st.markdown('<div style="background:#3b82f6; color:white; padding:10px; border-radius:5px; display:flex; justify-content:space-between; font-weight:bold;"><span>Product (Qty)</span><span>Total</span><span>Actions</span></div>', unsafe_allow_html=True)
             for i, itm in enumerate(st.session_state.cart):
-                col1, col2, col3, col4 = st.columns([4, 2, 1, 1])
-                col1.write(f"**{itm['Product']}** ({itm['Qty']})")
-                col2.write(f"Rs {int(itm['Total'])}")
-                if col3.button("✏️", key=f"ed_{i}"):
-                    st.session_state.e_idx = i
+                c1, c2, c3, c4 = st.columns([4, 2, 1, 1])
+                c1.write(f"**{itm['Product']}** ({itm['Qty']})")
+                c2.write(f"Rs {int(itm['Total'])}")
+                if c3.button("✏️", key=f"e_{i}"):
+                    st.session_state.edit_idx = i
                     st.rerun()
-                if col4.button("❌", key=f"dl_{i}"):
+                if c4.button("❌", key=f"x_{i}"):
                     st.session_state.cart.pop(i)
                     st.rerun()
                 st.divider()
 
-# ==========================================
-# STEP 6: PAYMENT METHOD & QR CODE
-# ==========================================
-            total = sum(i['Total'] for i in st.session_state.cart)
-            st.success(f"**Total Bill: Rs. {total}**")
-            pm = st.radio("Payment Method", ["COD", "JazzCash", "EasyPaisa"])
+# ========================================================
+# STEP 9: ORDER - TOTAL BILL & PAYMENT
+# ========================================================
+            total = sum(x['Total'] for x in st.session_state.cart)
+            st.success(f"**Grand Total: Rs. {total}**")
+            pm = st.radio("Payment", ["COD", "JazzCash", "EasyPaisa"])
+
+# ========================================================
+# STEP 10: ORDER - QR CODE GENERATION
+# ========================================================
             if pm != "COD":
                 acc = JAZZCASH_NO if pm == "JazzCash" else EASYPAISA_NO
-                st.info(f"Transfer to {pm}: {acc}")
-                qr = f"https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=Pay-{total}-to-{acc}"
-                st.image(qr, width=120)
+                st.info(f"Pay to {pm}: {acc}")
+                st.image(f"https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=Pay-{total}", width=120)
 
-# ==========================================
-# STEP 7: ORDER CONFIRMATION & NOTIFICATION
-# ==========================================
-            inv = f"APF-{len(orders_df) + 1:04d}"
-            if st.button(f"Confirm Order ({inv})", use_container_width=True):
-                items_txt = ", ".join([f"{i['Qty']}x {i['Product']}" for i in st.session_state.cart])
-                # Post to Google Sheet
-                requests.post(SCRIPT_URL, json={"action":"order", "name":u_name, "phone":st.session_state.user_data['Phone'], "product":items_txt, "bill":float(total), "payment_method":pm, "invoice_id": inv})
-                
-                st.success(f"Order Success! ID: {inv}")
-                
-                # Step 8: PDF Receipt
-                pdf = BytesIO()
-                p = canvas.Canvas(pdf)
-                p.drawString(100, 750, f"Invoice: {inv}")
-                p.drawString(100, 730, f"Customer: {u_name}")
-                p.drawString(100, 710, f"Total: Rs. {total}")
+# ========================================================
+# STEP 11: INVOICE GENERATION (PDF)
+# ========================================================
+            def get_pdf(inv, name, items, bill):
+                buf = BytesIO()
+                p = canvas.Canvas(buf)
+                p.drawString(100, 800, f"Invoice: {inv} | Customer: {name}")
+                p.drawString(100, 780, f"Items: {items} | Total: Rs. {bill}")
                 p.save()
-                st.download_button("📥 Download Receipt", pdf.getvalue(), f"{inv}.pdf")
+                return buf.getvalue()
+
+# ========================================================
+# STEP 12: ORDER CONFIRMATION & SAVE
+# ========================================================
+            inv_id = f"APF-{len(orders_df) + 1:04d}"
+            if st.button(f"Confirm Order ({inv_id})", use_container_width=True):
+                all_itms = ", ".join([f"{x['Qty']}x {x['Product']}" for x in st.session_state.cart])
+                requests.post(SCRIPT_URL, json={"action":"order", "name":u_name, "phone":st.session_state.user_data['Phone'], "product":all_itms, "bill":float(total), "payment_method":pm, "invoice_id": inv_id})
                 
-                # Step 9: WhatsApp Notification
-                wa_msg = f"*New Order ID:* {inv}\n*Bill:* Rs. {total}"
+                # Download Button for PDF
+                pdf_file = get_pdf(inv_id, u_name, all_itms, total)
+                st.download_button("📥 Download Receipt", pdf_file, f"{inv_id}.pdf")
+
+# ========================================================
+# STEP 13: WHATSAPP NOTIFICATION
+# ========================================================
+                wa_msg = f"*New Order ID:* {inv_id}\n*Customer:* {u_name}"
                 wa_url = f"https://wa.me/923005508112?text={requests.utils.quote(wa_msg)}"
-                st.markdown(f'<a href="{wa_url}" target="_blank"><button style="background:#25D366; color:white; border:none; padding:12px; border-radius:8px; width:100%; font-weight:bold; cursor:pointer;">💬 Notify Admin</button></a>', unsafe_allow_html=True)
-                
+                st.markdown(f'<a href="{wa_url}" target="_blank"><button style="background:#25D366; color:white; width:100%; padding:10px; border:none; border-radius:5px;">Notify Admin</button></a>', unsafe_allow_html=True)
                 st.session_state.cart = []
                 st.rerun()
 
-# ==========================================
-# STEP 10: ADMIN PANEL (MARK PAID / DELETE)
-# ==========================================
+# ========================================================
+# STEP 14: ORDER HISTORY
+# ========================================================
+    elif menu == "📜 History":
+        st.header("Your Order History")
+        my_orders = orders_df[orders_df['Phone'].astype(str) == str(st.session_state.user_data['Phone'])]
+        st.table(my_orders[['Date', 'Invoice_ID', 'Product', 'Status']])
+
+# ========================================================
+# STEP 15: FEEDBACK SYSTEM
+# ========================================================
+    elif menu == "💬 Feedback":
+        st.header("Send Feedback")
+        msg = st.text_area("Message")
+        if st.button("Submit Feedback"):
+            requests.post(SCRIPT_URL, json={"action":"feedback", "name":u_name, "phone":st.session_state.user_data['Phone'], "message":msg})
+            st.success("Sent Successfully!")
+
+# ========================================================
+# STEP 16: ADMIN PANEL (Management Logic)
+# ========================================================
     elif menu == "🔐 Admin":
         st.header("Admin Control")
-        pending = orders_df[orders_df['Status'].str.contains("Order|Pending", na=False)]
-        for idx, row in pending.iterrows():
-            with st.expander(f"Order: {row['Invoice_ID']} - {row['Name']}"):
-                st.write(f"Items: {row['Product']} | Bill: {row['Bill']}")
+        p_orders = orders_df[orders_df['Status'].str.contains("Order|Pending", na=False)]
+        for idx, row in p_orders.iterrows():
+            with st.expander(f"Order: {row['Invoice_ID']}"):
+                st.write(f"Items: {row['Product']}")
                 c1, c2 = st.columns(2)
                 if c1.button("Mark Paid ✅", key=f"p_{idx}"):
                     requests.post(SCRIPT_URL, json={"action":"mark_paid", "phone":row['Phone'], "product":row['Product']})
