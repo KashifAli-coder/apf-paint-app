@@ -131,113 +131,159 @@ if not st.session_state.logged_in:
                 st.warning("Please fill both fields.")
 
 # ========================================================
-# STEP 4: NAVIGATION
+# STEP 4: NAVIGATION (Sidebar & Logout)
 # ========================================================
 else:
-    nav_options = ["👤 Profile", "🛍️ Shop", "📜 History"]
+    st.sidebar.title("APF Factory")
+    # Menu names as per your requirement
+    nav_options = ["👤 Profile", "🛍️ New Order", "📜 History"]
     if st.session_state.get('is_admin'):
         nav_options.append("🔐 Admin")
     
     menu = st.sidebar.radio("Navigation", nav_options)
     
-    if st.sidebar.button("Logout"):
+    st.sidebar.divider()
+    if st.sidebar.button("Logout 🚪", use_container_width=True):
         for k in list(st.session_state.keys()): del st.session_state[k]
         st.rerun()
 
 # ========================================================
-# STEP 5: SHOP (INTERACTIVE TABLE - NO BUTTONS)
+# STEP 5: NEW ORDER (Inline Table & Full Logic)
 # ========================================================
-    if menu == "🛍️ Shop":
-        st.header("🛒 Order Menu")
+    if menu == "🛍️ New Order":
+        st.header("🛒 Create New Order")
         
-        # Selection
+        # Product Selection
         scat = st.selectbox("Category", settings_df['Category'].unique())
         sprod = st.selectbox("Product", settings_df[settings_df['Category']==scat]['Product Name'])
         prc = float(settings_df[settings_df['Product Name']==sprod]['Price'].values[0])
-        qty = st.number_input("Enter Quantity", min_value=1, value=1)
         
-        if st.button("Add to Cart ➕"):
-            if 'cart_df' not in st.session_state:
-                st.session_state.cart_df = pd.DataFrame(columns=["Product", "Qty", "Price", "Total"])
-            
-            new_item = pd.DataFrame([{"Product": sprod, "Qty": qty, "Price": prc, "Total": prc * qty}])
-            st.session_state.cart_df = pd.concat([st.session_state.cart_df, new_item], ignore_index=True)
+        if 'edit_index' not in st.session_state: st.session_state.edit_index = None
+        def_qty = st.session_state.cart[st.session_state.edit_index]['Qty'] if st.session_state.edit_index is not None else 1
+        qty = st.number_input("Quantity", min_value=1, value=def_qty)
+        
+        btn_txt = "Update Item ✏️" if st.session_state.edit_index is not None else "Add to Cart ➕"
+        if st.button(btn_txt, use_container_width=True):
+            if 'cart' not in st.session_state: st.session_state.cart = []
+            item_data = {"Product": sprod, "Qty": qty, "Total": prc * qty, "Price": prc}
+            if st.session_state.edit_index is not None:
+                st.session_state.cart[st.session_state.edit_index] = item_data
+                st.session_state.edit_index = None
+            else:
+                st.session_state.cart.append(item_data)
             st.rerun()
 
-        # --- THE INTERACTIVE TABLE (Solves your Delete/Edit issue) ---
-        if 'cart_df' in st.session_state and not st.session_state.cart_df.empty:
-            st.subheader("📋 Review Your Items")
-            st.info("💡 Tip: Click on Qty to change it. Select a row and press 'Delete' on your keyboard or use the trash icon to remove.")
+        # --- THE CLEAN INLINE TABLE (Mobile Optimized) ---
+        if 'cart' in st.session_state and st.session_state.cart:
+            st.markdown("### 📋 Review Your Items")
             
-            # This editor handles everything inside the table
-            edited_df = st.data_editor(
-                st.session_state.cart_df,
-                column_config={
-                    "Product": st.column_config.TextColumn("Product", disabled=True),
-                    "Qty": st.column_config.NumberColumn("Qty", min_value=1, step=1, format="%d"),
-                    "Price": st.column_config.NumberColumn("Price", disabled=True, format="Rs %d"),
-                    "Total": st.column_config.NumberColumn("Total", disabled=True, format="Rs %d"),
-                },
-                num_rows="dynamic", # Enables the trash icon for deleting rows
-                use_container_width=True,
-                key="cart_editor"
-            )
+            # Static HTML Header for Table Look
+            st.markdown("""
+                <table style="width:100%; border-collapse: collapse; font-size:13px; margin-bottom: 5px;">
+                    <tr style="background:#3b82f6; color:white; text-align:left;">
+                        <th style="padding:10px; width:40%;">Product</th>
+                        <th style="padding:10px; width:15%;">Qty</th>
+                        <th style="padding:10px; width:20%;">Total</th>
+                        <th style="padding:10px; width:25%;">Actions</th>
+                    </tr>
+                </table>
+            """, unsafe_allow_html=True)
+
+            # Row by Row with tight columns to keep icons in line
+            for i, item in enumerate(st.session_state.cart):
+                c1, c2, c3, c4, c5 = st.columns([3.5, 1, 1.5, 0.8, 0.8])
+                c1.write(f"**{item['Product']}**")
+                c2.write(str(item['Qty']))
+                c3.write(f"{int(item['Total'])}")
+                
+                # Small Icons for Edit/Delete
+                if c4.button("✏️", key=f"ed_{i}"):
+                    st.session_state.edit_index = i
+                    st.rerun()
+                if c5.button("❌", key=f"del_{i}"):
+                    st.session_state.cart.pop(i)
+                    st.rerun()
+                st.markdown("<hr style='margin:0; border-top:1px solid #eee;'>", unsafe_allow_html=True)
+
+            total_bill = sum(item['Total'] for item in st.session_state.cart)
+            st.success(f"**Total Bill: Rs. {total_bill}**")
             
-            # Re-calculate Total Bill
-            edited_df["Total"] = edited_df["Qty"] * edited_df["Price"]
-            st.session_state.cart_df = edited_df
-            total_bill = edited_df["Total"].sum()
-            
-            st.markdown(f"### **Grand Total: Rs. {total_bill:.0f}**")
-            
-            # Payment
-            pm = st.radio("Payment Method", ["COD", "JazzCash", "EasyPaisa"])
+            pm = st.radio("Payment", ["COD", "JazzCash", "EasyPaisa"])
             if pm != "COD":
                 acc = JAZZCASH_NO if pm == "JazzCash" else EASYPAISA_NO
-                st.warning(f"Transfer Rs. {total_bill:.0f} to {pm}: {acc}")
-                st.image(f"https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=Pay-{total_bill}-to-{acc}", width=150)
+                st.info(f"Pay to {pm}: {acc}")
+                qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=Pay-{total_bill}-to-{acc}"
+                st.image(qr_url, width=120)
 
-            # Confirm Order
-            inv_id = f"APF-{len(orders_df) + 1:04d}"
-            if st.button(f"Confirm Order ({inv_id})"):
-                u_name = st.session_state.user_data.get('Name', 'User')
-                u_phone = st.session_state.user_data.get('Phone', '000')
-                items_text = ", ".join([f"{int(r['Qty'])}x {r['Product']}" for _, r in edited_df.iterrows()])
+            # Confirmation & Order ID
+            inv_str = f"APF-{len(orders_df) + 1:04d}"
+            if st.button(f"Confirm Order ({inv_str})", use_container_width=True):
+                u_n = st.session_state.user_data.get('Name', 'User')
+                u_p = st.session_state.user_data.get('Phone', '000')
+                items_str = ", ".join([f"{i['Qty']}x {i['Product']}" for i in st.session_state.cart])
                 
                 # Send to Sheets
                 requests.post(SCRIPT_URL, json={
-                    "action":"order", "name":u_name, "phone":u_phone, 
-                    "product":items_text, "bill":float(total_bill), 
-                    "payment_method":pm, "invoice_id": inv_id
+                    "action":"order", "name":u_n, "phone":u_p, 
+                    "product":items_str, "bill":float(total_bill), 
+                    "payment_method":pm, "invoice_id": inv_str
                 })
                 
-                # WhatsApp & PDF
-                wa_msg = f"*New Order*\n*ID:* {inv_id}\n*Customer:* {u_name}\n*Total:* Rs. {total_bill}"
+                # WhatsApp Notification Link
+                wa_msg = f"*New Order*\n*ID:* {inv_str}\n*Bill:* Rs. {total_bill}\n*Items:* {items_str}"
                 wa_url = f"https://wa.me/923005508112?text={requests.utils.quote(wa_msg)}"
                 
-                st.success(f"Order Placed! ID: {inv_id}")
-                pdf = generate_pdf(inv_id, u_name, u_phone, items_text, total_bill, pm, "Pending")
-                st.download_button("📥 Download Receipt", pdf.getvalue(), f"{inv_id}.pdf")
-                st.markdown(f'<a href="{wa_url}" target="_blank"><button style="background:#25D366; color:white; border:none; padding:12px; border-radius:8px; width:100%; font-weight:bold; cursor:pointer;">💬 Notify Admin (WhatsApp)</button></a>', unsafe_allow_html=True)
+                st.success(f"Order Success! ID: {inv_str}")
+                pdf = generate_pdf(inv_str, u_n, u_p, items_str, total_bill, pm, "Pending")
+                st.download_button("📥 Receipt", pdf.getvalue(), f"{inv_str}.pdf")
+                st.markdown(f'<a href="{wa_url}" target="_blank"><button style="background:#25D366; color:white; border:none; padding:12px; border-radius:8px; width:100%; font-weight:bold; cursor:pointer;">💬 Notify Admin</button></a>', unsafe_allow_html=True)
                 
-                st.session_state.cart_df = pd.DataFrame(columns=["Product", "Qty", "Price", "Total"])
+                st.session_state.cart = []
                 st.rerun()
+
+# ========================================================
+# ADMIN PANEL (FIXED & FULL)
+# ========================================================
+    elif menu == "🔐 Admin":
+        st.header("Admin Control Center")
+        
+        # Displaying Orders from Google Sheets
+        if orders_df.empty:
+            st.warning("No data found in orders sheet.")
+        else:
+            # Show orders where status is 'Order' (Pending)
+            pending_orders = orders_df[orders_df['Status'].str.contains("Order|Pending", case=False, na=False)]
+            
+            if pending_orders.empty:
+                st.info("No pending orders to process.")
+            else:
+                for idx, row in pending_orders.iterrows():
+                    inv_id = row.get('Invoice_ID', f'ID-{idx}')
+                    with st.expander(f"👤 {row['Name']} ({inv_id})"):
+                        st.write(f"**Items:** {row['Product']}")
+                        st.write(f"**Total Bill:** Rs. {row['Bill']}")
+                        st.write(f"**Payment:** {row.get('Payment_Method', 'N/A')}")
+                        st.write(f"**Phone:** {row['Phone']}")
+                        
+                        col_a, col_b = st.columns(2)
+                        if col_a.button("Mark Paid ✅", key=f"paid_{idx}"):
+                            requests.post(SCRIPT_URL, json={
+                                "action":"mark_paid",
+                                "phone":row['Phone'],
+                                "product":row['Product']
+                            })
+                            st.success("Updated!")
+                            st.rerun()
+                        
+                        if col_b.button("Delete Order 🗑️", key=f"del_adm_{idx}"):
+                            requests.post(SCRIPT_URL, json={
+                                "action":"delete_order",
+                                "phone":row['Phone'],
+                                "product":row['Product']
+                            })
+                            st.warning("Deleted!")
+                            st.rerun()
 
     elif menu == "👤 Profile":
         st.header("User Dashboard")
-        # (Profile logic stays same)
-
-    elif menu == "🔐 Admin":
-        st.header("Admin Control")
-        # Fixed Admin Logic (No white screen)
-        pending = orders_df[orders_df['Status'].str.contains("Order|Pending", na=False)]
-        if pending.empty:
-            st.info("No pending orders.")
-        else:
-            for idx, row in pending.iterrows():
-                with st.expander(f"Order: {row.get('Invoice_ID', 'N/A')} - {row['Name']}"):
-                    st.write(f"**Items:** {row['Product']}")
-                    st.write(f"**Bill:** Rs. {row['Bill']}")
-                    if st.button("Mark Paid ✅", key=f"paid_{idx}"):
-                        requests.post(SCRIPT_URL, json={"action":"mark_paid","phone":row['Phone'],"product":row['Product']})
-                        st.rerun()
+        # (Profile logic stays here...)
