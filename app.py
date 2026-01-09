@@ -75,7 +75,7 @@ if not st.session_state.logged_in:
 # STEP 5: SIDEBAR & LOGOUT
 # ========================================================
 else:
-    u_name = st.session_state.user_data['Name']
+    u_name = st.session_state.user_data.get('Name', 'User')
     st.sidebar.success(f"👤 {u_name}")
     nav = ["👤 Profile", "🛍️ New Order", "📜 History", "💬 Feedback"]
     if st.session_state.is_admin: nav.append("🔐 Admin")
