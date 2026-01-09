@@ -34,10 +34,17 @@ if 'logged_in' not in st.session_state:
     st.session_state.update({'logged_in': False, 'user_data': {}, 'cart': [], 'edit_idx': None})
 
 # ========================================================
-# STEP 4: LOGIN & REGISTER (The Secure Way)
+# STEP 4: LOGIN & REGISTER (The Secure & Robust Way)
 # ========================================================
 if not st.session_state.logged_in:
     tab1, tab2 = st.tabs(["🔐 Login", "📝 Register"])
+
+    # Number normalization: 0 handle karne ke liye
+    def normalize_ph(n):
+        s = str(n).strip().replace('.0', '')
+        if s and not s.startswith('0'):
+            return '0' + s
+        return s
 
     with tab1:
         st.subheader("Login to your Account")
@@ -45,52 +52,60 @@ if not st.session_state.logged_in:
         pw_l = st.text_input("Password", type="password", key="l_pw").strip()
         
         if st.button("Login 🚀", use_container_width=True):
-            # 1. Fresh Data Load aur Khali Cells ko khatam karna
-            temp_df = users_df.copy()
-            temp_df = temp_df.fillna('')
+            # 1. Column cleaning to avoid KeyError
+            temp_df = users_df.copy().fillna('')
+            temp_df.columns = [str(c).strip() for c in temp_df.columns]
             
-            # 2. Columns ke naam se spaces khatam karna (Common Error Fix)
-            temp_df.columns = temp_df.columns.str.strip()
-            
-            # 3. Data ko String bana kar match karna
-            # Hum check kar rahe hain ke input aur sheet ka data match ho
-            check_ph = temp_df['Phone'].astype(str).str.strip() == str(ph_l)
-            check_pw = temp_df['Password'].astype(str).str.strip() == str(pw_l)
-            
-            match = temp_df[check_ph & check_pw]
-            
-            if not match.empty:
-                user_row = match.iloc[0]
-                user_role = str(user_row['Role']).strip().lower()
+            if 'Phone' not in temp_df.columns:
+                st.error("Sheet Error: 'Phone' column nahi mila. Headers check karein.")
+            else:
+                u_ph = normalize_ph(ph_l)
+                # Data matching
+                match = temp_df[
+                    (temp_df['Phone'].apply(normalize_ph) == u_ph) & 
+                    (temp_df['Password'].astype(str).str.strip() == pw_l)
+                ]
                 
-                if user_role == 'pending' or user_role == '':
-                    st.warning("⏳ Apki dakhust per Amal ho Raha hay account k verify hony ka intizar Karin thanks")
-                else:
-                    st.session_state.logged_in = True
-                    st.session_state.user_data = user_row.to_dict()
-                    # Admin check (Phone match)
-                    st.session_state.is_admin = (str(ph_l) == "03005508112")
-                    st.success("Welcome! Login Kamyab.")
-                    st.rerun()
-            else: 
-                # Diagnostic Help: Agar login na ho to check karein sheet mein data hai ya nahi
-                st.error("Ghalat Phone ya Password!")
-                if st.checkbox("Debug: Show Users List (Sirf Testing ke liye)"):
-                    st.write(temp_df[['Phone', 'Password', 'Role']])
+                if not match.empty:
+                    user_row = match.iloc[0]
+                    role = str(user_row['Role']).strip().lower()
+                    if role in ['pending', '']:
+                        st.warning("⏳ Apki dakhust per Amal ho Raha hay account k verify hony ka intizar Karin thanks")
+                    else:
+                        st.session_state.logged_in = True
+                        st.session_state.user_data = user_row.to_dict()
+                        st.session_state.is_admin = (u_ph == "03005508112")
+                        st.success("Login Kamyab!")
+                        st.rerun()
+                else: 
+                    st.error("Ghalat Phone ya Password!")
 
     with tab2:
         st.subheader("Create New Account")
         r_name = st.text_input("Full Name")
-        r_ph = st.text_input("Phone Number")
+        r_ph = st.text_input("Phone Number (0 se shuru karein)")
         r_pw = st.text_input("Create Password", type="password")
         
         if st.button("Register Now ✨", use_container_width=True):
             if r_name and r_ph and r_pw:
-                already = users_df[users_df['Phone'].astype(str).str.strip() == str(r_ph).strip()]
+                # 1. Columns clean karein (Line 89 Fix)
+                temp_df = users_df.copy().fillna('')
+                temp_df.columns = [str(c).strip() for c in temp_df.columns]
+                
+                reg_ph = normalize_ph(r_ph)
+                
+                # 2. Duplicate Check: Kya ye number pehle se sheet mein hai?
+                already = temp_df[temp_df['Phone'].apply(normalize_ph) == reg_ph]
+                
                 if not already.empty:
-                    st.error("Ye number pehle se majood hai!")
+                    current_status = str(already.iloc[0]['Role']).strip().lower()
+                    if current_status in ['pending', '']:
+                        st.info("⏳ Apki dakhust pehle se moosool ho chuki hay aur Pending hay. Intezar karein.")
+                    else:
+                        st.error("❌ Ye number pehle se Active hay. Meharbani farmakar Login karein.")
                 else:
-                    requests.post(SCRIPT_URL, json={"action":"register", "name":r_name, "phone":r_ph, "password":r_pw})
+                    # Nayi dakhust bhejna
+                    requests.post(SCRIPT_URL, json={"action":"register", "name":r_name, "phone":reg_ph, "password":r_pw})
                     st.success("✅ Registration Successful! Admin approval ka intizar karein.")
                     st.balloons()
             else:
