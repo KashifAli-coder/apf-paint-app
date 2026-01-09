@@ -126,11 +126,34 @@ else:
         st.rerun()
 
 # ========================================================
-# STEP 6: USER PROFILE DASHBOARD
+# STEP 6: USER PROFILE DASHBOARD (With Image & Zero Fix)
 # ========================================================
     if menu == "👤 Profile":
         st.header(f"👋 Welcome, {u_name}")
-        st.metric("Phone", st.session_state.user_data['Phone'])
+        
+        # --- NO-1: PHONE NUMBER WITH 0 FIX ---
+        raw_ph = str(st.session_state.user_data['Phone']).strip().replace('.0', '')
+        display_ph = raw_ph if raw_ph.startswith('0') else '0' + raw_ph
+        st.subheader(f"📞 Phone: {display_ph}")
+
+        st.divider()
+
+        # --- NO-2: CHANGEABLE PROFILE/DASHBOARD IMAGE ---
+        st.markdown("### 🖼️ Dashboard Personalization")
+        
+        # Image URL input (Aap kisi bhi image ka link yahan paste kar sakte hain)
+        # Example: https://images.unsplash.com/photo-1589939705384-5185137a7f0f (Painting/Hardware theme)
+        bg_img = st.text_input("Enter Image URL to change dashboard look:", 
+                              placeholder="https://example.com/your-image.jpg")
+        
+        if bg_img:
+            st.image(bg_img, use_container_width=True, caption="Your Custom Dashboard Look")
+        else:
+            # Default placeholder image agar koi link na ho
+            st.info("💡 Tip: Aap Google se kisi achi Hardware ya Paint shop ki image ka 'Copy Image Address' karke yahan paste kar sakte hain.")
+            st.image("https://img.freepik.com/free-photo/industrial-designers-working-on-project_23-2149307736.jpg", 
+                     use_container_width=True, caption="Default Design")
+
         st.info("Select 'New Order' from Sidebar to shop.")
 
 # ========================================================
