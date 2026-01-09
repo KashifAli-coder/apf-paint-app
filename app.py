@@ -34,19 +34,56 @@ if 'logged_in' not in st.session_state:
     st.session_state.update({'logged_in': False, 'user_data': {}, 'cart': [], 'edit_idx': None})
 
 # ========================================================
-# STEP 4: LOGIN LOGIC
+# STEP 4: LOGIN & REGISTRATION (With Admin Approval)
 # ========================================================
 if not st.session_state.logged_in:
-    st.header("🔐 APF Login")
-    ph = st.text_input("Phone Number")
-    pw = st.text_input("Password", type="password")
-    if st.button("Login", use_container_width=True):
-        user = users_df[(users_df['Phone'].astype(str) == ph) & (users_df['Password'].astype(str) == pw)]
-        if not user.empty:
-            st.session_state.logged_in = True
-            st.session_state.user_data = user.iloc[0].to_dict()
-            st.session_state.is_admin = (ph == "03005508112")
-            st.rerun()
+    tab1, tab2 = st.tabs(["🔐 Login", "📝 Register"])
+
+    with tab1:
+        st.subheader("Login to your Account")
+        ph_login = st.text_input("Phone Number", key="l_ph")
+        pw_login = st.text_input("Password", type="password", key="l_pw")
+        
+        if st.button("Login 🚀", use_container_width=True):
+            # Check if user exists and is approved
+            user = users_df[(users_df['Phone'].astype(str) == ph_login) & 
+                            (users_df['Password'].astype(str) == pw_login)]
+            
+            if not user.empty:
+                if str(user.iloc[0]['Role']).lower() == 'pending':
+                    st.warning("⏳ Aapka account abhi approval ke liye pending hai. Admin se rabta karein.")
+                else:
+                    st.session_state.logged_in = True
+                    st.session_state.user_data = user.iloc[0].to_dict()
+                    st.session_state.is_admin = (ph_login == "03005508112")
+                    st.success("Login Successful!")
+                    st.rerun()
+            else:
+                st.error("Ghalat Phone ya Password!")
+
+    with tab2:
+        st.subheader("Create New Account")
+        reg_name = st.text_input("Full Name")
+        reg_ph = st.text_input("Phone Number (Login ID)")
+        reg_pw = st.text_input("Create Password", type="password")
+        
+        if st.button("Register Now ✨", use_container_width=True):
+            if reg_name and reg_ph and reg_pw:
+                # Check if already registered
+                already = users_df[users_df['Phone'].astype(str) == reg_ph]
+                if not already.empty:
+                    st.error("Ye number pehle se registered hai!")
+                else:
+                    # Send to Google Sheet via Script
+                    requests.post(SCRIPT_URL, json={
+                        "action": "register",
+                        "name": reg_name,
+                        "phone": reg_ph,
+                        "password": reg_pw
+                    })
+                    st.success("✅ Registration kamyab! Admin ki approval ke baad aap login kar sakenge.")
+            else:
+                st.warning("Tamam khali jagah pur karein.")
     st.stop()
 
 # ========================================================
@@ -174,18 +211,70 @@ else:
             st.success("Sent Successfully!")
 
 # ========================================================
-# STEP 16: ADMIN PANEL (Management Logic)
+# STEP 16: ADMIN PANEL (Order Management & User Approval)
 # ========================================================
     elif menu == "🔐 Admin":
-        st.header("Admin Control")
-        p_orders = orders_df[orders_df['Status'].str.contains("Order|Pending", na=False)]
-        for idx, row in p_orders.iterrows():
-            with st.expander(f"Order: {row['Invoice_ID']}"):
-                st.write(f"Items: {row['Product']}")
-                c1, c2 = st.columns(2)
-                if c1.button("Mark Paid ✅", key=f"p_{idx}"):
-                    requests.post(SCRIPT_URL, json={"action":"mark_paid", "phone":row['Phone'], "product":row['Product']})
-                    st.rerun()
-                if c2.button("Delete 🗑️", key=f"d_{idx}"):
-                    requests.post(SCRIPT_URL, json={"action":"delete_order", "phone":row['Phone'], "product":row['Product']})
-                    st.rerun()
+        st.header("🛡️ Admin Control Center")
+        
+        # Tabs for better organization
+        tab_ord, tab_usr = st.tabs(["🛍️ Manage Orders", "👥 Approve New Users"])
+        
+        # --- SUB-STEP 16A: ORDER MANAGEMENT ---
+        with tab_ord:
+            st.subheader("Pending Orders")
+            # Sirf wo orders jin ka status Pending ya Order ho
+            p_orders = orders_df[orders_df['Status'].str.contains("Order|Pending", na=False)]
+            
+            if p_orders.empty:
+                st.info("Abhi koi naya order nahi aaya.")
+            else:
+                for idx, row in p_orders.iterrows():
+                    with st.expander(f"📦 Order: {row['Invoice_ID']} - {row['Name']}"):
+                        st.write(f"**Items:** {row['Product']}")
+                        st.write(f"**Bill:** Rs. {row['Bill']} | **Phone:** {row['Phone']}")
+                        st.write(f"**Payment:** {row['Payment']}")
+                        
+                        c1, c2 = st.columns(2)
+                        # Mark Paid Button
+                        if c1.button("Mark Paid ✅", key=f"p_{idx}"):
+                            requests.post(SCRIPT_URL, json={
+                                "action": "mark_paid", 
+                                "phone": row['Phone'], 
+                                "product": row['Product']
+                            })
+                            st.success("Status Updated!")
+                            st.rerun()
+                        
+                        # Delete Order Button
+                        if c2.button("Delete 🗑️", key=f"d_{idx}"):
+                            requests.post(SCRIPT_URL, json={
+                                "action": "delete_order", 
+                                "phone": row['Phone'], 
+                                "product": row['Product']
+                            })
+                            st.warning("Order Deleted!")
+                            st.rerun()
+
+        # --- SUB-STEP 16B: USER APPROVAL SYSTEM ---
+        with tab_usr:
+            st.subheader("Registration Requests")
+            # Wo users jin ka Role 'Pending' likha hai
+            pending_users = users_df[users_df['Role'].str.lower() == 'pending']
+            
+            if pending_users.empty:
+                st.info("Approval ke liye koi naya user maujood nahi hai.")
+            else:
+                st.markdown('<div style="background:#f0f2f6; padding:10px; border-radius:5px; font-weight:bold;">Pending Users List:</div>', unsafe_allow_html=True)
+                for idx, urow in pending_users.iterrows():
+                    col_u, col_b = st.columns([3, 1])
+                    col_u.write(f"👤 **{urow['Name']}**\n📞 {urow['Phone']}")
+                    
+                    # Approval Button
+                    if col_b.button("Approve ✅", key=f"app_{idx}"):
+                        res = requests.post(SCRIPT_URL, json={
+                            "action": "approve_user", 
+                            "phone": urow['Phone']
+                        })
+                        st.success(f"{urow['Name']} has been approved!")
+                        st.rerun()
+                st.divider()
