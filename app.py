@@ -166,106 +166,99 @@ else:
         ''', unsafe_allow_html=True)
 
 # ========================================================
-# STEP 5: NEW ORDER (SHOP) - COMPLETE WITH ALL FEATURES
+# STEP 5: NEW ORDER (Professional Table & Fixed Notification)
 # ========================================================
     elif menu == "🛍️ New Order":
         st.header("🛒 Create New Order")
         
-        # Product Selection Area
+        # 1. Product Selection
         scat = st.selectbox("Category", settings_df['Category'].unique())
         sprod = st.selectbox("Product", settings_df[settings_df['Category']==scat]['Product Name'])
         prc = float(settings_df[settings_df['Product Name']==sprod]['Price'].values[0])
-        qty = st.number_input("Enter Quantity", 1)
         
-        if st.button("Add to Cart"):
+        # Edit Mode handling
+        if 'edit_index' not in st.session_state: st.session_state.edit_index = None
+        
+        default_qty = 1
+        if st.session_state.edit_index is not None:
+            default_qty = st.session_state.cart[st.session_state.edit_index]['Qty']
+
+        qty = st.number_input("Quantity", min_value=1, value=default_qty)
+        
+        btn_label = "Update Item ✏️" if st.session_state.edit_index is not None else "Add to Cart ➕"
+        if st.button(btn_label):
             if 'cart' not in st.session_state: st.session_state.cart = []
-            st.session_state.cart.append({"Product":sprod, "Qty":qty, "Total":prc*qty})
+            
+            new_item = {"Product": sprod, "Qty": qty, "Total": prc * qty, "Price": prc}
+            
+            if st.session_state.edit_index is not None:
+                st.session_state.cart[st.session_state.edit_index] = new_item
+                st.session_state.edit_index = None # Reset edit mode
+            else:
+                st.session_state.cart.append(new_item)
             st.rerun()
-        
-        # --- CART REVIEW & DELETE OPTION ---
+
+        # 2. PROFESSIONAL TABLE REVIEW
         if 'cart' in st.session_state and st.session_state.cart:
-            st.markdown("---")
-            st.subheader("📋 Review Your Order")
+            st.markdown("### 📋 Review Your Items")
+            
+            # Table Header
+            h1, h2, h3, h4 = st.columns([3, 1, 1, 1])
+            h1.write("**Product**")
+            h2.write("**Qty**")
+            h3.write("**Total**")
+            h4.write("**Action**")
+            st.divider()
+
             for idx, item in enumerate(st.session_state.cart):
-                c1, c2, c3 = st.columns([3, 2, 1])
-                c1.write(f"**{item['Product']}**")
-                c2.write(f"{item['Qty']}x (Rs.{item['Total']/item['Qty']:.0f})")
-                if c3.button("❌", key=f"del_{idx}"):
+                c1, c2, c3, c4 = st.columns([3, 1, 1, 1])
+                c1.write(item['Product'])
+                c2.write(str(item['Qty']))
+                c3.write(f"{item['Total']:.0f}")
+                
+                # Delete & Edit Buttons side by side
+                btn_col1, btn_col2 = c4.columns(2)
+                if btn_col1.button("❌", key=f"del_{idx}"):
                     st.session_state.cart.pop(idx)
+                    st.rerun()
+                if btn_col2.button("✏️", key=f"ed_{idx}"):
+                    st.session_state.edit_index = idx
                     st.rerun()
             
             total_bill = sum(i['Total'] for i in st.session_state.cart)
-            st.success(f"Total Bill: Rs. {total_bill}")
+            st.info(f"**Total Bill: Rs. {total_bill}**")
             
-            # --- PAYMENT WITH LOGOS ---
-            pm = st.radio("Select Payment Method", ["COD", "JazzCash", "EasyPaisa"])
+            # 3. PAYMENT & CONFIRMATION
+            pm = st.radio("Payment Method", ["COD", "JazzCash", "EasyPaisa"])
             if pm != "COD":
                 acc = JAZZCASH_NO if pm == "JazzCash" else EASYPAISA_NO
-                logo = "https://upload.wikimedia.org/wikipedia/commons/b/ba/JazzCash_logo.png" if pm == "JazzCash" else "https://upload.wikimedia.org/wikipedia/commons/f/f2/Easypaisa_logo.png"
-                st.markdown(f'''
-                <div style="background: white; padding: 15px; border-radius: 12px; border: 1px solid #e2e8f0; text-align: center; margin-bottom: 10px;">
-                    <img src="{logo}" width="100">
-                    <h3 style="margin: 5px 0; color: #1e3a8a;">{acc}</h3>
-                    <p style="font-size: 11px; color: #64748b;">Transfer <b>Rs. {total_bill}</b> then click confirm</p>
-                </div>
-                ''', unsafe_allow_html=True)
-                st.image(f"https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=Pay-to-{acc}-Amount-{total_bill}", caption="Scan to Pay")
+                st.warning(f"Pay Rs. {total_bill} to {pm}: {acc}")
 
-            # --- SEQUENTIAL INVOICE & CONFIRMATION ---
-            inv_str = f"APF-{len(orders_df) + 1:04d}" 
+            # Fixed Invoice ID Logic
+            inv_str = f"APF-{len(orders_df) + 1:04d}"
 
             if st.button(f"Confirm Order ({inv_str})"):
-                items_str = ", ".join([f"{i['Qty']}x {i['Product']}" for i in st.session_state.cart])
-                
-                # Send to Sheet
+                # Data tayyar karna takay "None" na aaye
+                all_items_desc = ", ".join([f"{i['Qty']}x {i['Product']}" for i in st.session_state.cart])
+                u_name = st.session_state.user_data.get('Name', 'Customer')
+                u_phone = st.session_state.user_data.get('Phone', '000')
+
+                # Send to Google Sheets
                 requests.post(SCRIPT_URL, json={
-                    "action":"order", "name":st.session_state.user_data['Name'], 
-                    "phone":st.session_state.user_data['Phone'], "product":items_str, 
-                    "bill":float(total_bill), "payment_method":pm, "invoice_id": inv_str
+                    "action":"order", "name":u_name, "phone":u_phone, 
+                    "product":all_items_desc, "bill":float(total_bill), 
+                    "payment_method":pm, "invoice_id": inv_str
                 })
                 
-                # WhatsApp Link Logic
-                admin_msg = f"*New Order Recieved!*\n*ID:* {inv_str}\n*Customer:* {st.session_state.user_data['Name']}\n*Items:* {items_str}\n*Total:* Rs. {total_bill}\n*Payment:* {pm}"
-                wa_url = f"https://wa.me/923005508112?text={requests.utils.quote(admin_msg)}"
+                # WhatsApp Notification Logic (Fixed "None")
+                msg = f"*New Order Recieved!*\n*ID:* {inv_str}\n*Customer:* {u_name}\n*Items:* {all_items_desc}\n*Total:* Rs. {total_bill}"
+                wa_url = f"https://wa.me/923005508112?text={requests.utils.quote(msg)}"
                 
-                # PDF Generation
-                pdf = generate_pdf(inv_str, st.session_state.user_data['Name'], st.session_state.user_data['Phone'], items_str, total_bill, pm, "Pending")
-                
+                # Success & Actions
                 st.success(f"Order Success! ID: {inv_str}")
                 
-                col_pdf, col_wa = st.columns(2)
-                with col_pdf:
-                    st.download_button("📥 Download Receipt", pdf.getvalue(), f"{inv_str}.pdf")
-                with col_wa:
-                    st.markdown(f'<a href="{wa_url}" target="_blank" style="text-decoration:none;"><button style="background-color:#25D366; color:white; border:none; padding:10px; border-radius:8px; width:100%; cursor:pointer; font-weight:bold;">💬 Notify Admin</button></a>', unsafe_allow_html=True)
+                pdf = generate_pdf(inv_str, u_name, u_phone, all_items_desc, total_bill, pm, "Pending")
+                st.download_button("📥 Download Receipt", pdf.getvalue(), f"{inv_str}.pdf")
+                st.markdown(f'<a href="{wa_url}" target="_blank"><button style="background:#25D366; color:white; border:none; padding:10px; border-radius:8px; width:100%; cursor:pointer; font-weight:bold;">💬 Notify Admin (WhatsApp)</button></a>', unsafe_allow_html=True)
                 
                 st.session_state.cart = []
-
-    elif menu == "📜 History":
-        st.header("Order History")
-        u_p = st.session_state.user_data['Phone'][-10:]
-        hist = orders_df[orders_df['Phone'].str.contains(u_p, na=False)].iloc[::-1]
-        for _, row in hist.iterrows():
-            st.markdown(f'''
-            <div style="background:white; padding:15px; border-radius:10px; margin-bottom:10px; border-left:5px solid #3b82f6; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
-                <b style="color:#1e3a8a;">ID: {row.get("Invoice_ID", "N/A")}</b><br>
-                <span style="font-size:14px;">{row["Product"]}</span><br>
-                <b style="color:#10b981;">Rs. {row["Bill"]}</b>
-            </div>
-            ''', unsafe_allow_html=True)
-
-    elif menu == "🔐 Admin":
-        st.header("Admin Control Panel")
-        active = orders_df[orders_df['Status'].str.contains("Order", na=False)]
-        for idx, row in active.iterrows():
-            inv_l = row.get('Invoice_ID', f'ORD-{idx}')
-            with st.expander(f"👤 {row['Name']} - {inv_l}"):
-                c1, c2, c3 = st.columns(3)
-                if c1.button("Paid ✅", key=f"adm_p_{idx}"):
-                    requests.post(SCRIPT_URL, json={"action":"mark_paid","phone":row['Phone'],"product":row['Product'],"bill":row['Bill']})
-                    st.rerun()
-                if c2.button("Delete 🗑️", key=f"adm_d_{idx}"):
-                    requests.post(SCRIPT_URL, json={"action":"delete_order","phone":row['Phone'],"product":row['Product']})
-                    st.rerun()
-                adm_pdf = generate_pdf(inv_l, row['Name'], row['Phone'], row['Product'], row['Bill'], "N/A", "PAID")
-                c3.download_button("📄 PDF", adm_pdf.getvalue(), f"Inv_{inv_l}.pdf", key=f"pdf_{idx}")
