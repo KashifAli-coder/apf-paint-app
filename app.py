@@ -34,58 +34,42 @@ if 'logged_in' not in st.session_state:
     st.session_state.update({'logged_in': False, 'user_data': {}, 'cart': [], 'edit_idx': None})
 
 # ========================================================
-# STEP 4: LOGIN & REGISTRATION (With Admin Approval)
+# STEP 4: LOGIN & REGISTER
 # ========================================================
 if not st.session_state.logged_in:
     tab1, tab2 = st.tabs(["🔐 Login", "📝 Register"])
 
     with tab1:
-        st.subheader("Login to your Account")
-        ph_login = st.text_input("Phone Number", key="l_ph")
-        pw_login = st.text_input("Password", type="password", key="l_pw")
-        
+        ph_l = st.text_input("Phone", key="l_ph")
+        pw_l = st.text_input("Password", type="password", key="l_pw")
         if st.button("Login 🚀", use_container_width=True):
-            # Check if user exists and is approved
-            user = users_df[(users_df['Phone'].astype(str) == ph_login) & 
-                            (users_df['Password'].astype(str) == pw_login)]
-            
+            user = users_df[(users_df['Phone'].astype(str) == ph_l) & (users_df['Password'].astype(str) == pw_l)]
             if not user.empty:
-                if str(user.iloc[0]['Role']).lower() == 'pending':
-                    st.warning("⏳ Aapka account abhi approval ke liye pending hai. Admin se rabta karein.")
+                role = str(user.iloc[0]['Role']).lower()
+                if role == 'pending':
+                    st.warning("⏳ Apki dakhust per Amal ho Raha hay account k verify hony ka intizar Karin thanks")
                 else:
                     st.session_state.logged_in = True
                     st.session_state.user_data = user.iloc[0].to_dict()
-                    st.session_state.is_admin = (ph_login == "03005508112")
-                    st.success("Login Successful!")
+                    st.session_state.is_admin = (ph_l == "03005508112")
                     st.rerun()
-            else:
-                st.error("Ghalat Phone ya Password!")
+            else: st.error("Ghalat details!")
 
     with tab2:
-        st.subheader("Create New Account")
-        reg_name = st.text_input("Full Name")
-        reg_ph = st.text_input("Phone Number (Login ID)")
-        reg_pw = st.text_input("Create Password", type="password")
-        
+        r_name = st.text_input("Full Name")
+        r_ph = st.text_input("Phone (Login ID)")
+        r_pw = st.text_input("Create Password", type="password")
         if st.button("Register Now ✨", use_container_width=True):
-            if reg_name and reg_ph and reg_pw:
-                already = users_df[users_df['Phone'].astype(str) == reg_ph]
-                if not already.empty:
-                    st.error("Ye number pehle se registered hai!")
+            if r_name and r_ph and r_pw:
+                already = users_df[users_df['Phone'].astype(str) == r_ph]
+                if not already.empty: st.error("Number pehle se majood hai!")
                 else:
-                    # Data Sheet mein bhejna
-                    requests.post(SCRIPT_URL, json={
-                        "action": "register",
-                        "name": reg_name,
-                        "phone": reg_ph,
-                        "password": reg_pw
-                    })
-                    # Pop-up Message Box
-                    st.toast("Data Received! ✅")
-                    st.success("Apki dakhust per Amal ho Raha hay account k verify hony ka intizar Karin thanks")
-                    st.balloons() # Thori si professional animation
-            else:
-                st.warning("Tamam khali jagah pur karein.")
+                    # Google Sheet mein data bhejna
+                    requests.post(SCRIPT_URL, json={"action":"register", "name":r_name, "phone":r_ph, "password":r_pw})
+                    st.success("✅ Apki dakhust per Amal ho Raha hay account k verify hony ka intizar Karin thanks")
+                    st.balloons()
+            else: st.warning("Tamam khali jagah pur karein.")
+    st.stop() # <--- Ye line Key Error ko khatam karegi
 
 # ========================================================
 # STEP 5: SIDEBAR & LOGOUT
