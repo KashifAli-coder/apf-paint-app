@@ -113,93 +113,89 @@ if not st.session_state.logged_in:
     st.stop()
 
 # ========================================================
-# STEP 5: SIDEBAR & LOGOUT (With Profile Image)
+# STEP 5: SIDEBAR & LOGOUT
 # ========================================================
 else:
+    # User Data load karna
     u_name = st.session_state.user_data.get('Name', 'User')
     u_photo = st.session_state.user_data.get('Photo', '')
     
-    # Sidebar mein User ki choti photo dikhana
-    if u_photo and str(u_photo) != 'nan':
+    # Sidebar Profile Image Display
+    if u_photo and str(u_photo) != 'nan' and str(u_photo).strip() != "":
         st.sidebar.image(u_photo, width=100)
     else:
         st.sidebar.image("https://cdn-icons-png.flaticon.com/512/149/149071.png", width=80)
         
     st.sidebar.success(f"👤 {u_name}")
-    # ... baki sidebar ka code wahi rahega ...
-
-    else:
-    u_name = st.session_state.user_data.get('Name', 'User')
-    st.sidebar.success(f"👤 {u_name}")
+    
+    # Navigation Menu
     nav = ["👤 Profile", "🛍️ New Order", "📜 History", "💬 Feedback"]
-    if st.session_state.is_admin: nav.append("🔐 Admin")
+    if st.session_state.get('is_admin', False): 
+        nav.append("🔐 Admin")
+    
     menu = st.sidebar.radio("Navigation", nav)
+    
     if st.sidebar.button("Logout 🚪", use_container_width=True):
         st.session_state.clear()
         st.rerun()
 
 # ========================================================
-# STEP 6: USER PROFILE DASHBOARD (Full Replacement)
+# STEP 6: USER PROFILE & DIRECT PHOTO UPLOAD
 # ========================================================
     if menu == "👤 Profile":
         st.header(f"👋 Welcome, {u_name}")
         
-        # 1. Phone Number Display (Adding leading 0 if missing)
+        # Phone Number Leading 0 Fix
         raw_ph = str(st.session_state.user_data.get('Phone', '')).strip().replace('.0', '')
         display_ph = raw_ph if raw_ph.startswith('0') else '0' + raw_ph
         
-        # 2. Layout for Profile Picture and Info
         col1, col2 = st.columns([1, 2])
-        
         with col1:
-            # Mojooda Profile Photo dikhana
-            current_photo = st.session_state.user_data.get('Photo', '')
-            if current_photo and str(current_photo) != 'nan' and str(current_photo).strip() != "":
-                st.image(current_photo, width=150, caption="Current Profile")
+            current_img = st.session_state.user_data.get('Photo', '')
+            if current_img and str(current_img) != 'nan' and str(current_img).strip() != "":
+                st.image(current_img, width=150, caption="Apki Tasveer")
             else:
-                # Default avatar agar photo link mojud nahi
-                st.image("https://cdn-icons-png.flaticon.com/512/149/149071.png", width=150, caption="No Photo Set")
+                st.image("https://cdn-icons-png.flaticon.com/512/149/149071.png", width=150)
 
         with col2:
-            st.write(f"**Full Name:** {u_name}")
-            st.write(f"**Contact Number:** {display_ph}")
+            st.write(f"**Name:** {u_name}")
+            st.write(f"**Phone:** {display_ph}")
             st.write(f"**Account Status:** {st.session_state.user_data.get('Role', 'User')}")
 
         st.divider()
-
-        # 3. PROFILE PHOTO UPDATE SECTION
-        st.markdown("### 📸 Change Profile Picture")
-        st.write("Google se apni kisi bhi pasandida pic ka link copy karein aur yahan paste karein.")
         
-        new_photo_url = st.text_input("Paste Image URL here:", key="photo_url_input", 
-                                     placeholder="https://example.com/your-image.jpg")
+        # --- EASY FILE UPLOAD SECTION ---
+        st.markdown("### 📸 Upload Profile Picture")
+        uploaded_file = st.file_uploader("Gallery se photo select karein", type=["jpg", "png", "jpeg"])
         
-        if st.button("Update My Photo 🔄", use_container_width=True):
-            if new_photo_url:
+        if uploaded_file is not None:
+            # Preview dikhana
+            st.image(uploaded_file, width=100, caption="Selected Image")
+            
+            if st.button("Save This Photo ✅", use_container_width=True):
                 try:
-                    # Google Script (doPost) ko request bhejna
-                    # Is ke liye aap ka naya Google Script deployed hona zaroori hai
-                    with st.spinner("Updating on server..."):
-                        response = requests.post(SCRIPT_URL, json={
-                            "action": "update_photo",
-                            "phone": raw_ph,
-                            "photo": new_photo_url
-                        })
+                    # Photo ko URL mein convert karne ke liye (IMGBB ya Cloudinary asaan hai)
+                    # Filhal hum isay as a Base64 ya Link handle kar rahy hain
+                    # Note: Direct upload ke liye Image Hosting API chahiye hoti hai.
+                    # Asaan tareeqa: User se kahen link hi paste kary ya hum "imgbb" use karein.
                     
-                    if response.status_code == 200:
-                        # Session state update taake foran sidebar mein bhi nazar aaye
-                        st.session_state.user_data['Photo'] = new_photo_url
-                        st.success("✅ Profile photo kamyabi se badal di gayi!")
-                        st.balloons()
-                        st.rerun()
-                    else:
-                        st.error("Server ne request accept nahi ki.")
+                    # Agar aap chahte hain k user file select kary aur wo khud link ban jaye:
+                    import base64
+                    base64_image = base64.b64encode(uploaded_file.read()).decode('utf-8')
+                    img_data_url = f"data:image/png;base64,{base64_image}"
+                    
+                    # Google Script ko update bhejna
+                    requests.post(SCRIPT_URL, json={
+                        "action": "update_photo",
+                        "phone": raw_ph,
+                        "photo": img_data_url
+                    })
+                    
+                    st.session_state.user_data['Photo'] = img_data_url
+                    st.success("Photo Save ho gayi hai!")
+                    st.rerun()
                 except Exception as e:
-                    st.error(f"Error: Connection nahi ho saka. {e}")
-            else:
-                st.warning("Meharbani karke pehle ek sahi Image URL likhein.")
-
-        st.info("💡 Tip: Browser mein image par 'Right Click' karein aur 'Copy Image Address' par click karein.")
+                    st.error("Upload fail ho gaya. Link wala tareeqa behtar hai.")
 # ========================================================
 # STEP 7: ORDER - PRODUCT SELECTION
 # ========================================================
