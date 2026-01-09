@@ -9,7 +9,7 @@ from reportlab.pdfgen import canvas
 # STEP 1: CONFIGURATION & LINKS
 # ========================================================
 SHEET_ID = "1fIOaGMR3-M_t2dtYYuloFH7rSiFha_HDxfO6qaiEmDk"
-SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwr65rLmMBi8gMtIT6JAeHbD4keI7Er_05EKlJdUOmVh7WKzTwoZ37-Pxii96XCcYo/exec"
+SCRIPT_URL = "https://script.google.com/macros/s/AKfycbykgKyfzPzi08CxtEFiTytG-vwRUNV3wsB23lyPOJ77s8J7uOQFJ6Hf3XDFb3KsUgqO/exec"
 JAZZCASH_NO = "03005508112"
 EASYPAISA_NO = "03005508112"
 
