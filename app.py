@@ -69,22 +69,23 @@ if not st.session_state.logged_in:
         
         if st.button("Register Now ✨", use_container_width=True):
             if reg_name and reg_ph and reg_pw:
-                # Check if already registered
                 already = users_df[users_df['Phone'].astype(str) == reg_ph]
                 if not already.empty:
                     st.error("Ye number pehle se registered hai!")
                 else:
-                    # Send to Google Sheet via Script
+                    # Data Sheet mein bhejna
                     requests.post(SCRIPT_URL, json={
                         "action": "register",
                         "name": reg_name,
                         "phone": reg_ph,
                         "password": reg_pw
                     })
-                    st.success("✅ Registration kamyab! Admin ki approval ke baad aap login kar sakenge.")
+                    # Pop-up Message Box
+                    st.toast("Data Received! ✅")
+                    st.success("Apki dakhust per Amal ho Raha hay account k verify hony ka intizar Karin thanks")
+                    st.balloons() # Thori si professional animation
             else:
                 st.warning("Tamam khali jagah pur karein.")
-    st.stop()
 
 # ========================================================
 # STEP 5: SIDEBAR & LOGOUT
@@ -258,23 +259,21 @@ else:
         # --- SUB-STEP 16B: USER APPROVAL SYSTEM ---
         with tab_usr:
             st.subheader("Registration Requests")
-            # Wo users jin ka Role 'Pending' likha hai
             pending_users = users_df[users_df['Role'].str.lower() == 'pending']
             
             if pending_users.empty:
-                st.info("Approval ke liye koi naya user maujood nahi hai.")
+                st.info("Koi naya user approval ke liye nahi hai.")
             else:
-                st.markdown('<div style="background:#f0f2f6; padding:10px; border-radius:5px; font-weight:bold;">Pending Users List:</div>', unsafe_allow_html=True)
                 for idx, urow in pending_users.iterrows():
-                    col_u, col_b = st.columns([3, 1])
-                    col_u.write(f"👤 **{urow['Name']}**\n📞 {urow['Phone']}")
+                    # Checkbox for selection
+                    confirm = st.checkbox(f"Approve {urow['Name']} ({urow['Phone']})", key=f"chk_{idx}")
                     
-                    # Approval Button
-                    if col_b.button("Approve ✅", key=f"app_{idx}"):
-                        res = requests.post(SCRIPT_URL, json={
-                            "action": "approve_user", 
-                            "phone": urow['Phone']
-                        })
-                        st.success(f"{urow['Name']} has been approved!")
-                        st.rerun()
+                    if confirm:
+                        if st.button(f"Confirm Activation for {urow['Name']} ✅", key=f"btn_app_{idx}"):
+                            requests.post(SCRIPT_URL, json={
+                                "action": "approve_user", 
+                                "phone": urow['Phone']
+                            })
+                            st.success(f"{urow['Name']} active ho gaya hai!")
+                            st.rerun()
                 st.divider()
