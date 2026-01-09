@@ -139,57 +139,67 @@ else:
         st.rerun()
 
 # ========================================================
-# STEP 6: USER PROFILE DASHBOARD (With Profile Photo)
+# STEP 6: USER PROFILE DASHBOARD (Full Replacement)
 # ========================================================
     if menu == "👤 Profile":
         st.header(f"👋 Welcome, {u_name}")
         
-        # Phone Number Display with 0
+        # 1. Phone Number Display (Adding leading 0 if missing)
         raw_ph = str(st.session_state.user_data.get('Phone', '')).strip().replace('.0', '')
         display_ph = raw_ph if raw_ph.startswith('0') else '0' + raw_ph
         
+        # 2. Layout for Profile Picture and Info
         col1, col2 = st.columns([1, 2])
         
         with col1:
-            # Customer ki Mojooda Photo dikhana
-            user_photo = st.session_state.user_data.get('Photo', '')
-            if user_photo and str(user_photo) != 'nan':
-                st.image(user_photo, width=150, caption="Profile Picture")
+            # Mojooda Profile Photo dikhana
+            current_photo = st.session_state.user_data.get('Photo', '')
+            if current_photo and str(current_photo) != 'nan' and str(current_photo).strip() != "":
+                st.image(current_photo, width=150, caption="Current Profile")
             else:
-                st.image("https://cdn-icons-png.flaticon.com/512/149/149071.png", width=150, caption="No Photo")
+                # Default avatar agar photo link mojud nahi
+                st.image("https://cdn-icons-png.flaticon.com/512/149/149071.png", width=150, caption="No Photo Set")
 
         with col2:
-            st.write(f"**Name:** {u_name}")
-            st.write(f"**Phone:** {display_ph}")
-            st.write(f"**Status:** {st.session_state.user_data.get('Role', 'User')}")
+            st.write(f"**Full Name:** {u_name}")
+            st.write(f"**Contact Number:** {display_ph}")
+            st.write(f"**Account Status:** {st.session_state.user_data.get('Role', 'User')}")
 
         st.divider()
 
-        # --- PHOTO CHANGE SECTION ---
+        # 3. PROFILE PHOTO UPDATE SECTION
         st.markdown("### 📸 Change Profile Picture")
-        new_photo_url = st.text_input("Apni photo ka link (URL) yahan paste karein:", 
-                                     placeholder="https://example.com/your-photo.jpg")
+        st.write("Google se apni kisi bhi pasandida pic ka link copy karein aur yahan paste karein.")
         
-        if st.button("Update Profile Photo 🔄"):
+        new_photo_url = st.text_input("Paste Image URL here:", key="photo_url_input", 
+                                     placeholder="https://example.com/your-image.jpg")
+        
+        if st.button("Update My Photo 🔄", use_container_width=True):
             if new_photo_url:
                 try:
-                    # Google Sheet ko update bhejna
-                    resp = requests.post(SCRIPT_URL, json={
-                        "action": "update_photo",
-                        "phone": raw_ph,
-                        "photo": new_photo_url
-                    })
-                    st.success("✅ Profile photo update ho gayi! (Tabdeeli dekhne ke liye refresh karein)")
-                    # Session state update taake foran nazar aaye
-                    st.session_state.user_data['Photo'] = new_photo_url
-                    st.balloons()
-                except:
-                    st.error("Sheet update karne mein masla aya.")
+                    # Google Script (doPost) ko request bhejna
+                    # Is ke liye aap ka naya Google Script deployed hona zaroori hai
+                    with st.spinner("Updating on server..."):
+                        response = requests.post(SCRIPT_URL, json={
+                            "action": "update_photo",
+                            "phone": raw_ph,
+                            "photo": new_photo_url
+                        })
+                    
+                    if response.status_code == 200:
+                        # Session state update taake foran sidebar mein bhi nazar aaye
+                        st.session_state.user_data['Photo'] = new_photo_url
+                        st.success("✅ Profile photo kamyabi se badal di gayi!")
+                        st.balloons()
+                        st.rerun()
+                    else:
+                        st.error("Server ne request accept nahi ki.")
+                except Exception as e:
+                    st.error(f"Error: Connection nahi ho saka. {e}")
             else:
-                st.warning("Pehle photo ka URL likhein.")
+                st.warning("Meharbani karke pehle ek sahi Image URL likhein.")
 
-        st.info("💡 Tip: Aap kisi bhi tasveer par Right-Click karke 'Copy Image Address' karein aur yahan paste karein.")
-
+        st.info("💡 Tip: Browser mein image par 'Right Click' karein aur 'Copy Image Address' par click karein.")
 # ========================================================
 # STEP 7: ORDER - PRODUCT SELECTION
 # ========================================================
