@@ -134,7 +134,7 @@ if not st.session_state.logged_in:
 # STEP 4: USER PROFILE (DASHBOARD)
 # ========================================================
 else:
-    menu = st.sidebar.radio("Navigation", ["👤 Profile", "🛍️ Shop", "📜 History"] + (["🔐 Admin"] if st.session_state.get('is_admin') else []))
+    menu = st.sidebar.radio("Navigation", ["👤 Profile", "🛍️ New Order", "📜 History"] + (["🔐 Admin"] if st.session_state.get('is_admin') else []))
     if st.sidebar.button("Logout"):
         for k in list(st.session_state.keys()): del st.session_state[k]
         st.rerun()
