@@ -34,7 +34,7 @@ if 'logged_in' not in st.session_state:
     st.session_state.update({'logged_in': False, 'user_data': {}, 'cart': [], 'edit_idx': None})
 
 # ========================================================
-# STEP 4: LOGIN & REGISTER
+# STEP 4: LOGIN & REGISTER (Final Stable Version)
 # ========================================================
 if not st.session_state.logged_in:
     tab1, tab2 = st.tabs(["🔐 Login", "📝 Register"])
@@ -45,27 +45,31 @@ if not st.session_state.logged_in:
         pw_l = st.text_input("Password", type="password", key="l_pw")
         
         if st.button("Login 🚀", use_container_width=True):
-            # Khali cells ko khatam karna taake error na aaye
-            temp_df = users_df.fillna('') 
+            # 1. Khali cells ko safely handle karna
+            temp_df = users_df.copy()
+            temp_df = temp_df.fillna('') 
             
-            # LINE 50 FIX: Dono sides ko string mein badal kar check karna
-            user = temp_df[(temp_df['Phone'].astype(str).str.strip() == str(ph_l).strip()) & 
-                            (temp_df['Password'].astype(str).str.strip() == str(pw_l).strip())]
+            # 2. Simple comparison (Bina complex functions ke)
+            # Hum check kar rahe hain ke phone aur password match hotay hain ya nahi
+            match = temp_df[(temp_df['Phone'].astype(str) == str(ph_l)) & 
+                            (temp_df['Password'].astype(str) == str(pw_l))]
             
-            if not user.empty:
-                # Role check karna
-                role = str(user.iloc[0]['Role']).strip().lower()
+            if not match.empty:
+                # User mil gaya, ab Role check karein
+                user_row = match.iloc[0]
+                user_role = str(user_row['Role']).lower().strip()
                 
-                if role == 'pending' or role == '':
+                if user_role == 'pending' or user_role == '':
                     st.warning("⏳ Apki dakhust per Amal ho Raha hay account k verify hony ka intizar Karin thanks")
                 else:
                     st.session_state.logged_in = True
-                    st.session_state.user_data = user.iloc[0].to_dict()
-                    st.session_state.is_admin = (str(ph_l).strip() == "03005508112")
+                    st.session_state.user_data = user_row.to_dict()
+                    # Admin number check
+                    st.session_state.is_admin = (str(ph_l) == "03005508112")
                     st.success("Login Kamyab!")
                     st.rerun()
             else: 
-                st.error("Ghalat Phone ya Password! Please dobara check karein.")
+                st.error("Ghalat Phone ya Password!")
 
     with tab2:
         st.subheader("Create New Account")
@@ -75,19 +79,21 @@ if not st.session_state.logged_in:
         
         if st.button("Register Now ✨", use_container_width=True):
             if r_name and r_ph and r_pw:
-                # Registration check
                 already = users_df[users_df['Phone'].astype(str) == str(r_ph)]
                 if not already.empty:
                     st.error("Ye number pehle se registered hai!")
                 else:
-                    requests.post(SCRIPT_URL, json={
-                        "action": "register",
-                        "name": r_name,
-                        "phone": r_ph,
-                        "password": r_pw
-                    })
-                    st.success("✅ Apki dakhust per Amal ho Raha hay account k verify hony ka intizar Karin thanks")
-                    st.balloons()
+                    try:
+                        requests.post(SCRIPT_URL, json={
+                            "action": "register",
+                            "name": r_name,
+                            "phone": r_ph,
+                            "password": r_pw
+                        })
+                        st.success("✅ Apki dakhust per Amal ho Raha hay account k verify hony ka intizar Karin thanks")
+                        st.balloons()
+                    except:
+                        st.error("Connection Error!")
             else:
                 st.warning("Tamam khali jagah pur karein.")
     
