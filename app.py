@@ -166,102 +166,84 @@ else:
         ''', unsafe_allow_html=True)
 
 # ========================================================
-# STEP 5: NEW ORDER (Clean Icons & Table)
+# STEP 5: NEW ORDER (Table with Inline Icons) & ADMIN
 # ========================================================
     elif menu == "🛍️ New Order":
         st.header("🛒 Create New Order")
         
-        # 1. Product Selection
+        # Product Selection Logic
         scat = st.selectbox("Category", settings_df['Category'].unique())
         sprod = st.selectbox("Product", settings_df[settings_df['Category']==scat]['Product Name'])
         prc = float(settings_df[settings_df['Product Name']==sprod]['Price'].values[0])
         
         if 'edit_index' not in st.session_state: st.session_state.edit_index = None
+        def_qty = st.session_state.cart[st.session_state.edit_index]['Qty'] if st.session_state.edit_index is not None else 1
+        qty = st.number_input("Quantity", min_value=1, value=def_qty)
         
-        # Edit Mode (Quantity adjustment)
-        def_qty = 1
-        if st.session_state.edit_index is not None:
-            def_qty = st.session_state.cart[st.session_state.edit_index]['Qty']
-        
-        qty = st.number_input("Enter Quantity", min_value=1, value=def_qty)
-        
-        btn_label = "Update Item ✏️" if st.session_state.edit_index is not None else "Add to Cart ➕"
-        if st.button(btn_label):
+        if st.button("Update Item ✏️" if st.session_state.edit_index is not None else "Add to Cart ➕"):
             if 'cart' not in st.session_state: st.session_state.cart = []
-            item_data = {"Product": sprod, "Qty": qty, "Total": prc * qty, "Price": prc}
-            
+            item = {"Product": sprod, "Qty": qty, "Total": prc * qty, "Price": prc}
             if st.session_state.edit_index is not None:
-                st.session_state.cart[st.session_state.edit_index] = item_data
+                st.session_state.cart[st.session_state.edit_index] = item
                 st.session_state.edit_index = None
             else:
-                st.session_state.cart.append(item_data)
+                st.session_state.cart.append(item)
             st.rerun()
 
-        # 2. TABLE REVIEW (Clean Mobile Design)
+        # --- PROFESSIONAL INLINE TABLE ---
         if 'cart' in st.session_state and st.session_state.cart:
-            st.markdown("### 📋 Review Your Items")
+            st.markdown("### 📋 Review Items")
             
-            # Table HTML for professional look
-            table_html = """
-            <style>
-                .cart-table { width:100%; border-collapse: collapse; font-size: 14px; background: white; border-radius: 8px; overflow: hidden; }
-                .cart-table th { background: #3b82f6; color: white; padding: 12px; text-align: left; }
-                .cart-table td { padding: 12px; border-bottom: 1px solid #f1f5f9; color: #1e293b; }
-            </style>
-            <table class="cart-table">
-                <tr><th>Product</th><th>Qty</th><th>Total</th></tr>"""
+            # Table Header
+            t_head = "<table style='width:100%; border-collapse: collapse; font-size:12px;'> <tr style='background:#3b82f6; color:white;'><th style='padding:8px;'>Product</th><th style='padding:8px;'>Qty</th><th style='padding:8px;'>Total</th><th style='padding:8px;'>Edit</th><th style='padding:8px;'>Del</th></tr>"
+            t_rows = ""
+            for i, item in enumerate(st.session_state.cart):
+                t_rows += f"<tr style='border-bottom:1px solid #ddd;'><td style='padding:8px;'>{item['Product']}</td><td style='padding:8px;'>{item['Qty']}</td><td style='padding:8px;'>{item['Total']:.0f}</td><td style='padding:8px; text-align:center;'>✏️</td><td style='padding:8px; text-align:center;'>❌</td></tr>"
             
-            for idx, item in enumerate(st.session_state.cart):
-                table_html += f"<tr><td>{item['Product']}</td><td>{item['Qty']}</td><td>Rs. {item['Total']:.0f}</td></tr>"
-            table_html += "</table>"
-            st.markdown(table_html, unsafe_allow_html=True)
-
-            # --- CLEAN ACTIONS (Single Line Icons) ---
-            st.write("Edit / Remove Items:")
-            for i in range(len(st.session_state.cart)):
-                c1, c2, c3 = st.columns([0.5, 1, 4])
-                if c1.button("❌", key=f"del_{i}", help="Remove Item"):
-                    st.session_state.cart.pop(i); st.rerun()
-                if c2.button("✏️", key=f"ed_{i}", help="Edit Item"):
-                    st.session_state.edit_index = i; st.rerun()
-                c3.write(f"Item {i+1}: {st.session_state.cart[i]['Product']}")
+            st.markdown(t_head + t_rows + "</table>", unsafe_allow_html=True)
+            
+            # --- Invisible Action Buttons ---
+            st.write("Confirm Changes:")
+            c1, c2, c3 = st.columns(3)
+            idx_to_act = st.number_input("Item # to Edit/Delete", 1, len(st.session_state.cart), step=1)
+            if c1.button("Delete ❌"):
+                st.session_state.cart.pop(idx_to_act-1); st.rerun()
+            if c2.button("Edit ✏️"):
+                st.session_state.edit_index = idx_to_act-1; st.rerun()
 
             total_bill = sum(i['Total'] for i in st.session_state.cart)
             st.success(f"**Grand Total: Rs. {total_bill}**")
             
-            # 3. PAYMENT & CONFIRMATION
-            pm = st.radio("Payment Method", ["COD", "JazzCash", "EasyPaisa"])
+            pm = st.radio("Payment", ["COD", "JazzCash", "EasyPaisa"])
             if pm != "COD":
                 acc = JAZZCASH_NO if pm == "JazzCash" else EASYPAISA_NO
-                st.warning(f"Please Pay Rs. {total_bill} to {pm}: {acc}")
-                qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=Pay-{total_bill}-to-{acc}"
-                st.image(qr_url, width=150, caption="Scan QR to Pay")
+                st.image(f"https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=Pay-{total_bill}-to-{acc}", width=120)
 
-            # Sequential Invoice ID
             inv_str = f"APF-{len(orders_df) + 1:04d}"
-
             if st.button(f"Confirm Order ({inv_str})"):
-                # Safety checks for None values
-                u_name = st.session_state.user_data.get('Name', 'Customer')
-                u_phone = st.session_state.user_data.get('Phone', '000')
+                u_n, u_p = st.session_state.user_data.get('Name','User'), st.session_state.user_data.get('Phone','000')
                 items_str = ", ".join([f"{i['Qty']}x {i['Product']}" for i in st.session_state.cart])
+                requests.post(SCRIPT_URL, json={"action":"order", "name":u_n, "phone":u_p, "product":items_str, "bill":float(total_bill), "payment_method":pm, "invoice_id": inv_str})
                 
-                # Send to Sheet
-                requests.post(SCRIPT_URL, json={
-                    "action":"order", "name":u_name, "phone":u_phone, 
-                    "product":items_str, "bill":float(total_bill), 
-                    "payment_method":pm, "invoice_id": inv_str
-                })
-                
-                # WhatsApp Notification Link
-                msg = f"*New Order Recieved!*\n*ID:* {inv_str}\n*Bill:* Rs. {total_bill}\n*Customer:* {u_name}"
-                wa_url = f"https://wa.me/923005508112?text={requests.utils.quote(msg)}"
-                
-                st.success(f"Order Placed Successfully! ID: {inv_str}")
-                
-                # PDF Generation
-                pdf = generate_pdf(inv_str, u_name, u_phone, items_str, total_bill, pm, "Pending")
-                st.download_button("📥 Download Receipt", pdf.getvalue(), f"{inv_str}.pdf")
-                st.markdown(f'<a href="{wa_url}" target="_blank"><button style="background:#25D366; color:white; border:none; padding:12px; border-radius:8px; width:100%; font-weight:bold; cursor:pointer;">💬 Notify Admin on WhatsApp</button></a>', unsafe_allow_html=True)
-                
-                st.session_state.cart = [] # Clear cart
+                wa_msg = f"*New Order*\n*ID:* {inv_str}\n*Bill:* Rs. {total_bill}\n*Items:* {items_str}"
+                wa_url = f"https://wa.me/923005508112?text={requests.utils.quote(wa_msg)}"
+                st.markdown(f'<a href="{wa_url}" target="_blank"><button style="background:#25D366; color:white; border:none; padding:12px; border-radius:8px; width:100%; font-weight:bold;">💬 Notify Admin</button></a>', unsafe_allow_html=True)
+                st.session_state.cart = []
+
+# ========================================================
+# ADMIN PANEL (FIXED WHITE SCREEN)
+# ========================================================
+    elif menu == "🔐 Admin":
+        st.header("Admin Control")
+        # Pending orders filter
+        pending = orders_df[orders_df['Status'].str.contains("Order|Pending", na=False)]
+        if pending.empty:
+            st.info("No pending orders.")
+        else:
+            for idx, row in pending.iterrows():
+                with st.expander(f"Order: {row.get('Invoice_ID', 'N/A')} - {row['Name']}"):
+                    st.write(f"**Items:** {row['Product']}")
+                    st.write(f"**Bill:** Rs. {row['Bill']}")
+                    if st.button("Mark Paid ✅", key=f"paid_{idx}"):
+                        requests.post(SCRIPT_URL, json={"action":"mark_paid","phone":row['Phone'],"product":row['Product']})
+                        st.rerun()
