@@ -128,7 +128,7 @@ else:
     st.sidebar.success(f"👤 {u_name}")
     # ... baki sidebar ka code wahi rahega ...
 
-else:
+    else:
     u_name = st.session_state.user_data.get('Name', 'User')
     st.sidebar.success(f"👤 {u_name}")
     nav = ["👤 Profile", "🛍️ New Order", "📜 History", "💬 Feedback"]
