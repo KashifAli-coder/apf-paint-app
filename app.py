@@ -45,13 +45,15 @@ if not st.session_state.logged_in:
         pw_l = st.text_input("Password", type="password", key="l_pw")
         
         if st.button("Login 🚀", use_container_width=True):
-            # Khali cells (NaN) ka masla khatam karne ke liye fillna istemal kiya
+            # Khali cells ko khatam karna taake error na aaye
             temp_df = users_df.fillna('') 
-            user = temp_df[(temp_df['Phone'].astype(str) == ph_l) & 
-                            (temp_df['Password'].astype(str) == pw_l)]
+            
+            # LINE 50 FIX: Dono sides ko string mein badal kar check karna
+            user = temp_df[(temp_df['Phone'].astype(str).str.strip() == str(ph_l).strip()) & 
+                            (temp_df['Password'].astype(str).str.strip() == str(pw_l).strip())]
             
             if not user.empty:
-                # Role ko safely check karna (Space khatam karke aur small letters mein)
+                # Role check karna
                 role = str(user.iloc[0]['Role']).strip().lower()
                 
                 if role == 'pending' or role == '':
@@ -59,12 +61,11 @@ if not st.session_state.logged_in:
                 else:
                     st.session_state.logged_in = True
                     st.session_state.user_data = user.iloc[0].to_dict()
-                    # Admin check (Phone number ki base par)
-                    st.session_state.is_admin = (str(ph_l) == "03005508112")
+                    st.session_state.is_admin = (str(ph_l).strip() == "03005508112")
                     st.success("Login Kamyab!")
                     st.rerun()
             else: 
-                st.error("Ghalat Phone ya Password! Dubara koshish karein.")
+                st.error("Ghalat Phone ya Password! Please dobara check karein.")
 
     with tab2:
         st.subheader("Create New Account")
@@ -74,27 +75,22 @@ if not st.session_state.logged_in:
         
         if st.button("Register Now ✨", use_container_width=True):
             if r_name and r_ph and r_pw:
-                # Check agar number pehle se sheet mein hai
-                already = users_df[users_df['Phone'].astype(str) == r_ph]
+                # Registration check
+                already = users_df[users_df['Phone'].astype(str) == str(r_ph)]
                 if not already.empty:
                     st.error("Ye number pehle se registered hai!")
                 else:
-                    # Google Sheet (Google Apps Script) ko data bhejna
-                    try:
-                        requests.post(SCRIPT_URL, json={
-                            "action": "register",
-                            "name": r_name,
-                            "phone": r_ph,
-                            "password": r_pw
-                        })
-                        st.success("✅ Apki dakhust per Amal ho Raha hay account k verify hony ka intizar Karin thanks")
-                        st.balloons()
-                    except:
-                        st.error("Connection Error! Script URL check karein.")
+                    requests.post(SCRIPT_URL, json={
+                        "action": "register",
+                        "name": r_name,
+                        "phone": r_ph,
+                        "password": r_pw
+                    })
+                    st.success("✅ Apki dakhust per Amal ho Raha hay account k verify hony ka intizar Karin thanks")
+                    st.balloons()
             else:
-                st.warning("Meharbani farmakar tamam khali jagah pur karein.")
+                st.warning("Tamam khali jagah pur karein.")
     
-    # Ye line sab se aham hai, ye login ke baghair code ko aagay nahi janay deti
     st.stop()
 
 # ========================================================
