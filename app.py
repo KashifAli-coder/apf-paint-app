@@ -113,8 +113,21 @@ if not st.session_state.logged_in:
     st.stop()
 
 # ========================================================
-# STEP 5: SIDEBAR & LOGOUT
+# STEP 5: SIDEBAR & LOGOUT (With Profile Image)
 # ========================================================
+else:
+    u_name = st.session_state.user_data.get('Name', 'User')
+    u_photo = st.session_state.user_data.get('Photo', '')
+    
+    # Sidebar mein User ki choti photo dikhana
+    if u_photo and str(u_photo) != 'nan':
+        st.sidebar.image(u_photo, width=100)
+    else:
+        st.sidebar.image("https://cdn-icons-png.flaticon.com/512/149/149071.png", width=80)
+        
+    st.sidebar.success(f"👤 {u_name}")
+    # ... baki sidebar ka code wahi rahega ...
+
 else:
     u_name = st.session_state.user_data.get('Name', 'User')
     st.sidebar.success(f"👤 {u_name}")
@@ -126,35 +139,56 @@ else:
         st.rerun()
 
 # ========================================================
-# STEP 6: USER PROFILE DASHBOARD (With Image & Zero Fix)
+# STEP 6: USER PROFILE DASHBOARD (With Profile Photo)
 # ========================================================
     if menu == "👤 Profile":
         st.header(f"👋 Welcome, {u_name}")
         
-        # --- NO-1: PHONE NUMBER WITH 0 FIX ---
-        raw_ph = str(st.session_state.user_data['Phone']).strip().replace('.0', '')
+        # Phone Number Display with 0
+        raw_ph = str(st.session_state.user_data.get('Phone', '')).strip().replace('.0', '')
         display_ph = raw_ph if raw_ph.startswith('0') else '0' + raw_ph
-        st.subheader(f"📞 Phone: {display_ph}")
+        
+        col1, col2 = st.columns([1, 2])
+        
+        with col1:
+            # Customer ki Mojooda Photo dikhana
+            user_photo = st.session_state.user_data.get('Photo', '')
+            if user_photo and str(user_photo) != 'nan':
+                st.image(user_photo, width=150, caption="Profile Picture")
+            else:
+                st.image("https://cdn-icons-png.flaticon.com/512/149/149071.png", width=150, caption="No Photo")
+
+        with col2:
+            st.write(f"**Name:** {u_name}")
+            st.write(f"**Phone:** {display_ph}")
+            st.write(f"**Status:** {st.session_state.user_data.get('Role', 'User')}")
 
         st.divider()
 
-        # --- NO-2: CHANGEABLE PROFILE/DASHBOARD IMAGE ---
-        st.markdown("### 🖼️ Dashboard Personalization")
+        # --- PHOTO CHANGE SECTION ---
+        st.markdown("### 📸 Change Profile Picture")
+        new_photo_url = st.text_input("Apni photo ka link (URL) yahan paste karein:", 
+                                     placeholder="https://example.com/your-photo.jpg")
         
-        # Image URL input (Aap kisi bhi image ka link yahan paste kar sakte hain)
-        # Example: https://images.unsplash.com/photo-1589939705384-5185137a7f0f (Painting/Hardware theme)
-        bg_img = st.text_input("Enter Image URL to change dashboard look:", 
-                              placeholder="https://example.com/your-image.jpg")
-        
-        if bg_img:
-            st.image(bg_img, use_container_width=True, caption="Your Custom Dashboard Look")
-        else:
-            # Default placeholder image agar koi link na ho
-            st.info("💡 Tip: Aap Google se kisi achi Hardware ya Paint shop ki image ka 'Copy Image Address' karke yahan paste kar sakte hain.")
-            st.image("https://img.freepik.com/free-photo/industrial-designers-working-on-project_23-2149307736.jpg", 
-                     use_container_width=True, caption="Default Design")
+        if st.button("Update Profile Photo 🔄"):
+            if new_photo_url:
+                try:
+                    # Google Sheet ko update bhejna
+                    resp = requests.post(SCRIPT_URL, json={
+                        "action": "update_photo",
+                        "phone": raw_ph,
+                        "photo": new_photo_url
+                    })
+                    st.success("✅ Profile photo update ho gayi! (Tabdeeli dekhne ke liye refresh karein)")
+                    # Session state update taake foran nazar aaye
+                    st.session_state.user_data['Photo'] = new_photo_url
+                    st.balloons()
+                except:
+                    st.error("Sheet update karne mein masla aya.")
+            else:
+                st.warning("Pehle photo ka URL likhein.")
 
-        st.info("Select 'New Order' from Sidebar to shop.")
+        st.info("💡 Tip: Aap kisi bhi tasveer par Right-Click karke 'Copy Image Address' karein aur yahan paste karein.")
 
 # ========================================================
 # STEP 7: ORDER - PRODUCT SELECTION
