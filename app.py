@@ -26,26 +26,25 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ========================================================
-# STEP 2: DATA FETCHING (Fixed Column Mapping)
+# STEP 2: DATA FETCHING (Simplified)
 # ========================================================
 @st.cache_data(ttl=0)
 def load_all_data():
     t = int(time.time())
     base = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&t={t}&sheet="
     
-    # Users Data Loading
+    # Data load karte waqt columns ke shuru aur aakhir ki khali jagah (spaces) khatam karna
     u_df = pd.read_csv(base + "Users").fillna('')
-    u_df.columns = [str(c).strip() for c in u_df.columns] # Extra spaces khatam
-    
-    # Zaroori: Agar column name 'Phone' nahi mil raha to manually rename karein
-    # Hum maan rahe hain ke Column A=Name, B=Phone, C=Password, D=Role, E=Photo
-    new_cols = ['Name', 'Phone', 'Password', 'Role', 'Photo']
-    if len(u_df.columns) >= 5:
-        u_df.columns = new_cols + list(u_df.columns[5:])
+    u_df.columns = u_df.columns.str.strip() 
     
     s_df = pd.read_csv(base + "Settings").fillna('')
+    s_df.columns = s_df.columns.str.strip()
+    
     o_df = pd.read_csv(base + "Orders").fillna('')
+    o_df.columns = o_df.columns.str.strip()
+    
     f_df = pd.read_csv(base + "Feedback").fillna('')
+    f_df.columns = f_df.columns.str.strip()
     
     return u_df, s_df, o_df, f_df
 
@@ -63,7 +62,7 @@ def normalize_ph(n):
     return s
 
 # ========================================================
-# STEP 4: LOGIN & REGISTER (Duplicate Check & 0 Fix)
+# STEP 4: LOGIN & REGISTER (Strict Logic)
 # ========================================================
 if not st.session_state.logged_in:
     t1, t2 = st.tabs(["🔐 Login", "📝 Register"])
@@ -71,15 +70,21 @@ if not st.session_state.logged_in:
     with t1:
         ph_l = st.text_input("Phone Number", key="l_ph")
         pw_l = st.text_input("Password", type="password", key="l_pw")
+        
         if st.button("Login 🚀"):
+            # Phone ko saaf suthra string banana matching ke liye
             u_ph = normalize_ph(ph_l)
-            # Match strictly with normalized phone
-            match = users_df[(users_df['Phone'].apply(normalize_ph) == u_ph) & (users_df['Password'].astype(str) == pw_l)]
+            
+            # Match logic: Column Phone ko string mein convert kar ke match karna
+            match = users_df[
+                (users_df['Phone'].astype(str).apply(normalize_ph) == u_ph) & 
+                (users_df['Password'].astype(str).str.strip() == pw_l.strip())
+            ]
             
             if not match.empty:
                 user_row = match.iloc[0].to_dict()
                 if str(user_row.get('Role', '')).lower() == 'pending':
-                    st.warning("⏳ Account Pending... Please wait for Admin approval.")
+                    st.warning("⏳ Account Pending... Admin approval ka intezar karein.")
                 else:
                     st.session_state.update({
                         'logged_in': True, 
@@ -88,40 +93,37 @@ if not st.session_state.logged_in:
                     })
                     st.rerun()
             else:
-                st.error("❌ Invalid Phone or Password")
+                st.error("❌ Phone number ya Password ghalat hai!")
 
     with t2:
         r_name = st.text_input("Full Name")
-        r_ph = st.text_input("Phone Number (e.g. 03001234567)")
+        r_ph = st.text_input("Phone Number")
         r_pw = st.text_input("Create Password", type="password")
         
         if st.button("Register ✨"):
             if r_name and r_ph and r_pw:
                 u_ph_new = normalize_ph(r_ph)
                 
-                # --- DUPLICATE CHECK LOGIC ---
-                # Check if this phone already exists in our users_df
-                existing_numbers = users_df['Phone'].apply(normalize_ph).tolist()
+                # --- DUPLICATE CHECK: Sirf tab register hoga jab number list mein NAHI hoga ---
+                existing_numbers = users_df['Phone'].astype(str).apply(normalize_ph).tolist()
                 
                 if u_ph_new in existing_numbers:
-                    st.error(f"❌ Error: Number {u_ph_new} pehle se register hai. Aap dobara register nahi kar sakte!")
+                    st.error(f"❌ Error: Number {u_ph_new} pehle se mojud hai!")
                 else:
-                    # Agar naya number hai to single quote lagakar bhein taake 0 save ho
+                    # Naya number hai, ab submit hoga
                     safe_ph = f"'{u_ph_new}"
-                    with st.spinner("Registering..."):
-                        requests.post(SCRIPT_URL, json={
-                            "action":"register", 
-                            "name":r_name, 
-                            "phone":safe_ph, 
-                            "password":r_pw
-                        })
-                        st.success("✅ Registered Successfully! Admin approval ka intezar karein.")
-                        time.sleep(2)
-                        st.rerun()
+                    requests.post(SCRIPT_URL, json={
+                        "action":"register", 
+                        "name":r_name, 
+                        "phone":safe_ph, 
+                        "password":r_pw
+                    })
+                    st.success("✅ Application Sent! Approval ka intezar karein.")
+                    time.sleep(2)
+                    st.rerun()
             else:
-                st.warning("⚠️ Sab fields bharna zaroori hain.")
+                st.warning("⚠️ Meharbani karke tamam khali jaghen bharein.")
     st.stop()
-
 
 # ========================================================
 # STEP 5: SIDEBAR
