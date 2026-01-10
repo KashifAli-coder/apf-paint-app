@@ -18,18 +18,36 @@ JAZZCASH_NO = "03005508112"
 EASYPAISA_NO = "03005508112"
 
 # ========================================================
-# STEP 2: DATA FETCHING (4 Tables from 1 Sheet)
+# STEP 2: DATA FETCHING (Fixed for Photo Column E)
 # ========================================================
-@st.cache_data(ttl=60)
+
+# ttl=0 ka matlab hai ke har refresh par fresh data uthaye ga
+# Agar photo update ke baad nahi dikh rahi, to ttl=0 lazmi hai
+@st.cache_data(ttl=0) 
 def load_all_data():
+    # Base URL mein koi tabdeeli nahi, lekin hum ensure karenge ke column names sahi ayen
     base = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet="
+    
+    # Users data load karte waqt ensure karein ke column E (Photo) shamil ho
     u_df = pd.read_csv(base + "Users")
+    
+    # Clean Column Names: Kabhi kabhi columns mein extra space aa jati hai
+    u_df.columns = [str(c).strip() for c in u_df.columns]
+    
+    # Baki data as it is
     s_df = pd.read_csv(base + "Settings")
     o_df = pd.read_csv(base + "Orders")
     f_df = pd.read_csv(base + "Feedback")
+    
     return u_df, s_df, o_df, f_df
 
+# Data load karna
 users_df, settings_df, orders_df, feedback_df = load_all_data()
+
+# --- LOGIN CHECK POINT ---
+# Jab aap user_data session mein save karte hain, to check karein ke Column E fetch hua ya nahi
+# Example debug line (aap isay check kar ke delete kar sakte hain):
+# st.sidebar.write(f"Available Columns: {users_df.columns.tolist()}")
 
 # ========================================================
 # STEP 3: SESSION STATE INITIALIZATION
