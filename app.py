@@ -265,42 +265,68 @@ elif menu == "💬 Feedback":
             st.warning("Please enter a message.")
 
 # ========================================================
-# STEP 16: ADMIN PANEL (Management & Approvals)
+# STEP 16 : ADMIN PANEL & DASHBOARD (Integrated)
 # ========================================================
 elif menu == "🔐 Admin":
-    st.header("🛡️ Admin Management")
-    admin_tab1, admin_tab2 = st.tabs(["📦 Orders Manager", "👥 User Approvals"])
+    st.header("🛡️ Admin Control Center")
     
-    with admin_tab1:
-        st.subheader("Manage Active Orders")
-        # Pending/Active filter
-        pending_orders = orders_df[orders_df['Status'].str.contains("Order|Pending", na=False)]
+    # --- STEP 17: ANALYTICS (Top Section) ---
+    with st.container():
+        st.markdown("### 📊 Business Overview")
+        col_s1, col_s2, col_s3 = st.columns(3)
         
-        for idx, row in pending_orders.iterrows():
-            with st.expander(f"Order {row['Invoice_ID']} - {row['Name']}"):
-                st.write(f"**Items:** {row['Product']} | **Bill:** Rs.{row['Bill']}")
-                
-                c_paid, c_del = st.columns(2)
-                if c_paid.button("Mark Paid ✅", key=f"adm_paid_{idx}"):
-                    requests.post(SCRIPT_URL, json={"action": "mark_paid", "phone": row['Phone'], "product": row['Product']})
-                    st.rerun()
-                if c_del.button("Delete 🗑️", key=f"adm_del_{idx}"):
-                    requests.post(SCRIPT_URL, json={"action": "delete_order", "phone": row['Phone'], "product": row['Product']})
+        # Calculations
+        revenue = orders_df[orders_df['Status'].str.contains("Paid|Confirmed", na=False)]['Bill'].sum()
+        total_o = len(orders_df)
+        active_u = len(users_df[users_df['Role'].str.lower() == 'user'])
+        
+        col_s1.metric("Total Revenue", f"Rs. {revenue}")
+        col_s2.metric("Total Orders", total_o)
+        col_s3.metric("Active Users", active_u)
+        
+        # Sales Chart
+        if not orders_df.empty:
+            sales_data = orders_df.copy()
+            sales_data['Date'] = pd.to_datetime(sales_data['Date']).dt.date
+            chart_df = sales_data.groupby('Date')['Bill'].sum().reset_index()
+            st.line_chart(chart_df.set_index('Date'))
+        st.divider()
+
+    # --- STEP 16: MANAGEMENT TABS (Bottom Section) ---
+    ad_tab1, ad_tab2, ad_tab3 = st.tabs(["📦 Orders Manager", "👥 User Approvals", "📜 Full Logs"])
+    
+    with ad_tab1:
+        st.subheader("Manage Active Orders")
+        p_orders = orders_df[orders_df['Status'].str.contains("Order|Pending", na=False)]
+        if p_orders.empty:
+            st.info("Abhi koi naya order nahi hai.")
+        else:
+            for idx, row in p_orders.iterrows():
+                with st.expander(f"Order {row['Invoice_ID']} - {row['Name']}"):
+                    st.write(f"**Items:** {row['Product']} | **Bill:** Rs.{row['Bill']}")
+                    c_p, c_d = st.columns(2)
+                    if c_p.button("Mark Paid ✅", key=f"adm_p_{idx}"):
+                        requests.post(SCRIPT_URL, json={"action": "mark_paid", "phone": row['Phone'], "product": row['Product']})
+                        st.rerun()
+                    if c_d.button("Delete 🗑️", key=f"adm_d_{idx}"):
+                        requests.post(SCRIPT_URL, json={"action": "delete_order", "phone": row['Phone'], "product": row['Product']})
+                        st.rerun()
+
+    with ad_tab2:
+        st.subheader("New User Requests")
+        p_regs = users_df[users_df['Role'].str.lower() == 'pending']
+        if p_regs.empty:
+            st.info("Koi user pending nahi hai.")
+        else:
+            for idx, u_row in p_regs.iterrows():
+                u_ph_fix = normalize_ph(u_row['Phone'])
+                st.write(f"👤 **{u_row['Name']}** ({u_ph_fix})")
+                if st.button(f"Approve {u_row['Name']} ✅", key=f"adm_u_{idx}"):
+                    requests.post(SCRIPT_URL, json={"action": "approve_user", "phone": u_ph_fix})
+                    st.success("User Approved!")
+                    time.sleep(1)
                     st.rerun()
 
-    with admin_tab2:
-        st.subheader("New User Requests")
-        pending_regs = users_df[users_df['Role'].str.lower() == 'pending']
-        
-        if pending_regs.empty:
-            st.info("No users awaiting approval.")
-        else:
-            for idx, u_row in pending_regs.iterrows():
-                u_ph_clean = normalize_ph(u_row['Phone']) # Formatting fix for .0
-                st.write(f"👤 **{u_row['Name']}** ({u_ph_clean})")
-                
-                if st.button(f"Approve {u_row['Name']} ✅", key=f"adm_app_{idx}"):
-                    requests.post(SCRIPT_URL, json={"action": "approve_user", "phone": u_ph_clean})
-                    st.success(f"{u_row['Name']} has been approved!")
-                    time.sleep(1)
-                    st.rerun() # Refresh to clear approved user from list
+    with ad_tab3:
+        st.subheader("Complete Data Logs")
+        st.dataframe(orders_df, use_container_width=True)
