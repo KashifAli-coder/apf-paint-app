@@ -26,26 +26,17 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ========================================================
-# STEP 2: DATA FETCHING (Simplified)
+# STEP 2: DATA FETCHING
 # ========================================================
 @st.cache_data(ttl=0)
 def load_all_data():
     t = int(time.time())
     base = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&t={t}&sheet="
-    
-    # Data load karte waqt columns ke shuru aur aakhir ki khali jagah (spaces) khatam karna
     u_df = pd.read_csv(base + "Users").fillna('')
-    u_df.columns = u_df.columns.str.strip() 
-    
+    u_df.columns = [str(c).strip() for c in u_df.columns]
     s_df = pd.read_csv(base + "Settings").fillna('')
-    s_df.columns = s_df.columns.str.strip()
-    
     o_df = pd.read_csv(base + "Orders").fillna('')
-    o_df.columns = o_df.columns.str.strip()
-    
     f_df = pd.read_csv(base + "Feedback").fillna('')
-    f_df.columns = f_df.columns.str.strip()
-    
     return u_df, s_df, o_df, f_df
 
 users_df, settings_df, orders_df, feedback_df = load_all_data()
@@ -62,68 +53,33 @@ def normalize_ph(n):
     return s
 
 # ========================================================
-# STEP 4: LOGIN & REGISTER (Strict Logic)
+# STEP 4: LOGIN & REGISTER
 # ========================================================
 if not st.session_state.logged_in:
     t1, t2 = st.tabs(["🔐 Login", "📝 Register"])
-    
     with t1:
         ph_l = st.text_input("Phone Number", key="l_ph")
         pw_l = st.text_input("Password", type="password", key="l_pw")
-        
         if st.button("Login 🚀"):
-            # Phone ko saaf suthra string banana matching ke liye
             u_ph = normalize_ph(ph_l)
-            
-            # Match logic: Column Phone ko string mein convert kar ke match karna
-            match = users_df[
-                (users_df['Phone'].astype(str).apply(normalize_ph) == u_ph) & 
-                (users_df['Password'].astype(str).str.strip() == pw_l.strip())
-            ]
-            
+            match = users_df[(users_df['Phone'].apply(normalize_ph) == u_ph) & (users_df['Password'].astype(str) == pw_l)]
             if not match.empty:
-                user_row = match.iloc[0].to_dict()
-                if str(user_row.get('Role', '')).lower() == 'pending':
-                    st.warning("⏳ Account Pending... Admin approval ka intezar karein.")
+                user_row = match.iloc[0]
+                if str(user_row['Role']).lower() == 'pending':
+                    st.warning("⏳ Account Pending...")
                 else:
-                    st.session_state.update({
-                        'logged_in': True, 
-                        'user_data': user_row, 
-                        'is_admin': (u_ph == normalize_ph(JAZZCASH_NO))
-                    })
+                    st.session_state.update({'logged_in': True, 'user_data': user_row.to_dict(), 'is_admin': (u_ph == normalize_ph(JAZZCASH_NO))})
                     st.rerun()
-            else:
-                st.error("❌ Phone number ya Password ghalat hai!")
-
+            else: st.error("Invalid Login")
     with t2:
         r_name = st.text_input("Full Name")
-        r_ph = st.text_input("Phone Number")
+        r_ph = st.text_input("Phone")
         r_pw = st.text_input("Create Password", type="password")
-        
         if st.button("Register ✨"):
-            if r_name and r_ph and r_pw:
-                u_ph_new = normalize_ph(r_ph)
-                
-                # --- DUPLICATE CHECK: Sirf tab register hoga jab number list mein NAHI hoga ---
-                existing_numbers = users_df['Phone'].astype(str).apply(normalize_ph).tolist()
-                
-                if u_ph_new in existing_numbers:
-                    st.error(f"❌ Error: Number {u_ph_new} pehle se mojud hai!")
-                else:
-                    # Naya number hai, ab submit hoga
-                    safe_ph = f"'{u_ph_new}"
-                    requests.post(SCRIPT_URL, json={
-                        "action":"register", 
-                        "name":r_name, 
-                        "phone":safe_ph, 
-                        "password":r_pw
-                    })
-                    st.success("✅ Application Sent! Approval ka intezar karein.")
-                    time.sleep(2)
-                    st.rerun()
-            else:
-                st.warning("⚠️ Meharbani karke tamam khali jaghen bharein.")
+            requests.post(SCRIPT_URL, json={"action":"register", "name":r_name, "phone":normalize_ph(r_ph), "password":r_pw})
+            st.success("Registered! Wait for approval.")
     st.stop()
+
 
 # ========================================================
 # STEP 5: SIDEBAR
@@ -145,12 +101,11 @@ else:
         st.session_state.clear(); st.rerun()
 
 # ========================================================
-# STEP 6: PROFILE (Fixed: No Blue Border & Link Safety)
+# STEP 6: PROFILE (Fix: Pop-up & Border)
 # ========================================================
 if menu == "👤 Profile":
     st.header(f"👋 Hi, {u_name}")
-    p_img = u_photo if (u_photo and str(u_photo) != 'nan' and str(u_photo).strip() != "") else "https://cdn-icons-png.flaticon.com/512/149/149071.png"
-    
+    p_img = u_photo if (u_photo and str(u_photo) != 'nan') else "https://cdn-icons-png.flaticon.com/512/149/149071.png"
     st.markdown(f'<img src="{p_img}" class="profile-img">', unsafe_allow_html=True)
     
     with st.popover("📷 Change Photo"):
@@ -163,21 +118,13 @@ if menu == "👤 Profile":
             b64 = base64.b64encode(img_file.read()).decode('utf-8')
             final = f"data:image/png;base64,{b64}"
             if st.button("Update Now ✅"):
-                # Phone ke shuru mein ' lagana taake Sheet match kar sake
-                safe_ph = f"'{raw_ph}"
-                res = requests.post(SCRIPT_URL, json={
-                    "action":"update_photo", 
-                    "phone":safe_ph, 
-                    "photo":final
-                })
+                res = requests.post(SCRIPT_URL, json={"action":"update_photo", "phone":raw_ph, "photo":final})
                 if "Photo Updated" in res.text:
                     st.session_state.user_data['Photo'] = final
                     st.success("Updated!"); time.sleep(1); st.rerun()
-                else:
-                    st.error(f"Update failed: {res.text}")
 
 
- # ========================================================
+# ========================================================
 # STEP 7: ORDER - PRODUCT SELECTION
 # ========================================================
 elif menu == "🛍️ New Order":
@@ -194,9 +141,9 @@ elif menu == "🛍️ New Order":
     
     if st.button("Add to Cart ➕", use_container_width=True):
         st.session_state.cart.append({
-            "Product": sprod,
-            "Qty": qty,
-            "Price": prc,
+            "Product": sprod, 
+            "Qty": qty, 
+            "Price": prc, 
             "Total": prc * qty
         })
         st.toast(f"{sprod} added to cart!")
@@ -254,14 +201,14 @@ elif menu == "🛍️ New Order":
             invoice_id = f"APF-{int(time.time())}"
             all_products = ", ".join([f"{x['Qty']}x {x['Product']}" for x in st.session_state.cart])
             
-            # Send Data to Google Sheets (Safe Phone with single quote)
+            # Send Data to Google Sheets
             order_payload = {
-                "action": "order",
+                "action": "order", 
                 "invoice_id": invoice_id,
-                "name": u_name,
-                "phone": f"'{raw_ph}", 
-                "product": all_products,
-                "bill": float(total_bill),
+                "name": u_name, 
+                "phone": raw_ph, 
+                "product": all_products, 
+                "bill": float(total_bill), 
                 "payment_method": pay_method
             }
             requests.post(SCRIPT_URL, json=order_payload)
@@ -285,7 +232,6 @@ elif menu == "🛍️ New Order":
 # ========================================================
 elif menu == "📜 History":
     st.header("Your Order History")
-    # Normalize phone for matching
     user_orders = orders_df[orders_df['Phone'].apply(normalize_ph) == raw_ph]
     
     if user_orders.empty:
@@ -299,87 +245,134 @@ elif menu == "📜 History":
 elif menu == "💬 Feedback":
     st.subheader("🌟 Share Your Experience")
     
+    # 1. Session State Initialize (Text area ko khali karne ke liye)
     if 'feedback_text' not in st.session_state:
         st.session_state.feedback_text = ""
 
+    # Custom Fancy Card for User Info
     st.markdown(f"""
     <div style="background: white; padding: 25px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); border: 1px solid #f1f5f9; margin-bottom: 20px;">
         <div style="color: #64748b; font-size: 0.9em; margin-bottom: 5px;">Customer Name</div>
         <div style="color: #1e293b; font-weight: 600; font-size: 1.1em; margin-bottom: 15px;">👤 {u_name}</div>
         <div style="color: #64748b; font-size: 0.9em; margin-bottom: 5px;">Phone Number</div>
         <div style="color: #1e293b; font-weight: 600; font-size: 1.1em; margin-bottom: 15px;">📞 {raw_ph}</div>
+        <div style="color: #64748b; font-size: 0.9em; margin-bottom: 5px;">Current Date</div>
+        <div style="color: #1e293b; font-weight: 600; font-size: 1.1em;">📅 {datetime.now().strftime('%d %b, %Y')}</div>
     </div>
     """, unsafe_allow_html=True)
     
-    f_msg = st.text_area("Write message...", placeholder="Type here...", height=150, key="f_input")
+    # 2. Text Area connected to Session State
+    st.markdown("##### ✍️ Write your message")
+    f_msg = st.text_area(
+        "feedback_box", 
+        value=st.session_state.feedback_text,
+        placeholder="Type your experience or suggestions here...", 
+        height=150, 
+        label_visibility="collapsed",
+        key="f_input" # Unique key for state management
+    )
     
     if st.button("Submit Feedback 📩", use_container_width=True):
         if f_msg.strip():
-            with st.spinner("Saving..."):
-                payload = {"action":"feedback", "name":u_name, "phone":f"'{raw_ph}", "message":f_msg}
+            with st.spinner("Saving your feedback..."):
+                payload = {
+                    "action":"feedback", 
+                    "name":u_name, 
+                    "phone":raw_ph, 
+                    "message":f_msg,
+                    "date": datetime.now().strftime('%Y-%m-%d %H:%M')
+                }
+                # Google Sheets Update
                 requests.post(SCRIPT_URL, json=payload)
+                
+                # Feedback Effects
                 st.balloons()
-                st.success("✅ Saved!")
-                time.sleep(1.5)
-                st.session_state.menu = "👤 Profile" # Dashboard/Profile par wapas
-                st.rerun()
+                st.success("✅ Thank you! Your feedback has been saved.")
+                
+                # 3. Logic: Clear Box and Move to Dashboard
+                time.sleep(1.5) # User ko success message dekhne ka mauka dein
+                st.session_state.feedback_text = "" # Box khali karein
+                
+                # Sidebar menu ko "Dashboard" par redirect karne ke liye
+                # Note: 'Dashboard' wahi spelling honi chahiye jo aapke sidebar radio button mein hai
+                if 'menu' in st.session_state:
+                    st.session_state.menu = "🏠 Dashboard" # Menu index reset (Aapka Dashboard icon ke mutabiq)
+                
+                st.rerun() # Refresh karke Dashboard par bhej dein
+        else:
+            st.warning("⚠️ Please type a message before submitting.")
+
 
 # ========================================================
-# STEP 16: UPDATED ADMIN PANEL (Cleaned & Single Block)
+# STEP 16: UPDATED ADMIN PANEL & DASHBOARD (Integrated)
 # ========================================================
 elif menu == "🔐 Admin":
     st.header("🛡️ Admin Management Console")
     
-    # Dashboard Analytics
-    st.markdown("### 📊 Business Overview")
-    col_m1, col_m2, col_m3 = st.columns(3)
-    
-    # Revenue Calculation
-    paid_orders = orders_df[orders_df['Status'].astype(str).str.contains("Paid|Confirmed", na=False)]
-    total_rev = paid_orders['Bill'].astype(float).sum()
-    total_ord = len(orders_df)
-    active_usr = len(users_df[users_df['Role'].astype(str).str.lower() == 'user'])
-    
-    col_m1.metric("Total Revenue", f"Rs. {total_rev}")
-    col_m2.metric("Total Orders", total_ord)
-    col_m3.metric("Active Users", active_usr)
-    
-    if not orders_df.empty:
-        sales_chart_df = orders_df.copy()
-        sales_chart_df['Date'] = pd.to_datetime(sales_chart_df['Date']).dt.date
-        chart_group = sales_chart_df.groupby('Date')['Bill'].sum().reset_index()
-        st.line_chart(chart_group.set_index('Date'))
-    
-    st.divider()
+    # --- DASHBOARD: Analytics Metrics (Integrated as Step 16 Part) ---
+    with st.container():
+        st.markdown("### 📊 Business Overview")
+        col_m1, col_m2, col_m3 = st.columns(3)
+        
+        # Calculations for metrics
+        total_rev = orders_df[orders_df['Status'].astype(str).str.contains("Paid|Confirmed", na=False)]['Bill'].sum()
+        total_ord = len(orders_df)
+        active_usr = len(users_df[users_df['Role'].astype(str).str.lower() == 'user'])
+        
+        col_m1.metric("Total Revenue", f"Rs. {total_rev}")
+        col_m2.metric("Total Orders", total_ord)
+        col_m3.metric("Active Users", active_usr)
+        
+        # Sales Chart Visualization
+        if not orders_df.empty:
+            sales_chart_df = orders_df.copy()
+            sales_chart_df['Date'] = pd.to_datetime(sales_chart_df['Date']).dt.date
+            chart_group = sales_chart_df.groupby('Date')['Bill'].sum().reset_index()
+            st.line_chart(chart_group.set_index('Date'))
+        st.divider()
 
-    # Management Tabs
+    # --- MANAGEMENT: Action Tabs ---
     tab_ord, tab_usr, tab_fdb = st.tabs(["📦 Orders Manager", "👥 User Approvals", "💬 Feedback Logs"])
     
     with tab_ord:
+        st.subheader("Manage Active Orders")
+        # Filter for orders that need attention
         active_o = orders_df[orders_df['Status'].astype(str).str.contains("Order|Pending", na=False)]
-        if active_o.empty: st.info("No active orders.")
+        if active_o.empty:
+            st.info("No active orders found.")
         else:
             for idx, r in active_o.iterrows():
                 with st.expander(f"Order {r['Invoice_ID']} - {r['Name']}"):
-                    st.write(f"**Products:** {r['Product']} | **Bill:** Rs.{r['Bill']}")
+                    st.write(f"**Products:** {r['Product']}")
+                    st.write(f"**Bill:** Rs.{r['Bill']} | **Method:** {r['Payment_Method']}")
+                    
                     c_p, c_d = st.columns(2)
                     if c_p.button("Mark Paid ✅", key=f"btn_p_{idx}"):
-                        requests.post(SCRIPT_URL, json={"action": "mark_paid", "phone": f"'{normalize_ph(r['Phone'])}", "product": r['Product']})
+                        requests.post(SCRIPT_URL, json={"action": "mark_paid", "phone": normalize_ph(r['Phone']), "product": r['Product']})
                         st.rerun()
                     if c_d.button("Delete 🗑️", key=f"btn_d_{idx}"):
-                        requests.post(SCRIPT_URL, json={"action": "delete_order", "phone": f"'{normalize_ph(r['Phone'])}", "product": r['Product']})
+                        requests.post(SCRIPT_URL, json={"action": "delete_order", "phone": normalize_ph(r['Phone']), "product": r['Product']})
                         st.rerun()
 
     with tab_usr:
+        st.subheader("User Verification")
         p_users = users_df[users_df['Role'].astype(str).str.lower() == 'pending']
-        if p_users.empty: st.info("No pending approvals.")
+        if p_users.empty:
+            st.info("No pending approvals.")
         else:
             for idx, ur in p_users.iterrows():
-                st.write(f"👤 **{ur['Name']}** ({normalize_ph(ur['Phone'])})")
+                u_ph_formatted = normalize_ph(ur['Phone']) # Fix for .0 formatting
+                st.write(f"👤 **{ur['Name']}** ({u_ph_formatted})")
                 if st.button(f"Approve {ur['Name']} ✅", key=f"btn_u_{idx}"):
-                    requests.post(SCRIPT_URL, json={"action": "approve_user", "phone": f"'{normalize_ph(ur['Phone'])}"})
-                    st.success("Approved!"); time.sleep(1); st.rerun()
+                    requests.post(SCRIPT_URL, json={"action": "approve_user", "phone": u_ph_formatted})
+                    st.success(f"{ur['Name']} approved!")
+                    time.sleep(1)
+                    st.rerun()
 
     with tab_fdb:
-        if feedback_df.empty: st.info("No feedback.")
-        else: st.dataframe(feedback_df[['Date', 'Name', 'Phone', 'Message']], use_container_width=True)
+        st.subheader("Customer Reviews")
+        if feedback_df.empty:
+            st.info("No feedback messages yet.")
+        else:
+            st.dataframe(feedback_df[['Date', 'Name', 'Phone', 'Message']], use_container_width=True)
+
