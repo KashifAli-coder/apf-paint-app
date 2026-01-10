@@ -350,3 +350,76 @@ elif menu == "🔐 Admin":
             st.info("No feedback messages yet.")
         else:
             st.dataframe(feedback_df[['Date', 'Name', 'Phone', 'Message']], use_container_width=True)
+
+# ========================================================
+# STEP 16: UPDATED ADMIN PANEL & DASHBOARD (Integrated)
+# ========================================================
+elif menu == "🔐 Admin":
+    st.header("🛡️ Admin Management Console")
+    
+    # --- DASHBOARD: Analytics Metrics (Integrated as Step 16 Part) ---
+    with st.container():
+        st.markdown("### 📊 Business Overview")
+        col_m1, col_m2, col_m3 = st.columns(3)
+        
+        # Calculations for metrics
+        total_rev = orders_df[orders_df['Status'].astype(str).str.contains("Paid|Confirmed", na=False)]['Bill'].sum()
+        total_ord = len(orders_df)
+        active_usr = len(users_df[users_df['Role'].astype(str).str.lower() == 'user'])
+        
+        col_m1.metric("Total Revenue", f"Rs. {total_rev}")
+        col_m2.metric("Total Orders", total_ord)
+        col_m3.metric("Active Users", active_usr)
+        
+        # Sales Chart Visualization
+        if not orders_df.empty:
+            sales_chart_df = orders_df.copy()
+            sales_chart_df['Date'] = pd.to_datetime(sales_chart_df['Date']).dt.date
+            chart_group = sales_chart_df.groupby('Date')['Bill'].sum().reset_index()
+            st.line_chart(chart_group.set_index('Date'))
+        st.divider()
+
+    # --- MANAGEMENT: Action Tabs ---
+    tab_ord, tab_usr, tab_fdb = st.tabs(["📦 Orders Manager", "👥 User Approvals", "💬 Feedback Logs"])
+    
+    with tab_ord:
+        st.subheader("Manage Active Orders")
+        # Filter for orders that need attention
+        active_o = orders_df[orders_df['Status'].astype(str).str.contains("Order|Pending", na=False)]
+        if active_o.empty:
+            st.info("No active orders found.")
+        else:
+            for idx, r in active_o.iterrows():
+                with st.expander(f"Order {r['Invoice_ID']} - {r['Name']}"):
+                    st.write(f"**Products:** {r['Product']}")
+                    st.write(f"**Bill:** Rs.{r['Bill']} | **Method:** {r['Payment_Method']}")
+                    
+                    c_p, c_d = st.columns(2)
+                    if c_p.button("Mark Paid ✅", key=f"btn_p_{idx}"):
+                        requests.post(SCRIPT_URL, json={"action": "mark_paid", "phone": normalize_ph(r['Phone']), "product": r['Product']})
+                        st.rerun()
+                    if c_d.button("Delete 🗑️", key=f"btn_d_{idx}"):
+                        requests.post(SCRIPT_URL, json={"action": "delete_order", "phone": normalize_ph(r['Phone']), "product": r['Product']})
+                        st.rerun()
+
+    with tab_usr:
+        st.subheader("User Verification")
+        p_users = users_df[users_df['Role'].astype(str).str.lower() == 'pending']
+        if p_users.empty:
+            st.info("No pending approvals.")
+        else:
+            for idx, ur in p_users.iterrows():
+                u_ph_formatted = normalize_ph(ur['Phone']) # Fix for .0 formatting
+                st.write(f"👤 **{ur['Name']}** ({u_ph_formatted})")
+                if st.button(f"Approve {ur['Name']} ✅", key=f"btn_u_{idx}"):
+                    requests.post(SCRIPT_URL, json={"action": "approve_user", "phone": u_ph_formatted})
+                    st.success(f"{ur['Name']} approved!")
+                    time.sleep(1)
+                    st.rerun()
+
+    with tab_fdb:
+        st.subheader("Customer Reviews")
+        if feedback_df.empty:
+            st.info("No feedback messages yet.")
+        else:
+            st.dataframe(feedback_df[['Date', 'Name', 'Phone', 'Message']], use_container_width=True)
