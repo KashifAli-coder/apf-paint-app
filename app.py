@@ -42,6 +42,34 @@ def load_all_data():
 users_df, settings_df, orders_df, feedback_df = load_all_data()
 
 # ========================================================
+# FIXING '0' MISSING ISSUE (Updated Step)
+# ========================================================
+
+# Jab aap data save karte hain (Registration ya Update mein):
+if st.button("Submit"):
+    # Phone number ke shuru mein ' add karna taake Sheet 0 na hataye
+    formatted_phone = f"'{phone_input}" if not phone_input.startswith("'") else phone_input
+    
+    payload = {
+        "action": "register", # ya update_photo
+        "name": u_name,
+        "phone": formatted_phone, # Ab ye '0300...' save hoga
+        "password": u_pass,
+        # baqi fields...
+    }
+    
+    # ... baki requests.post wala code ...
+
+# Jab aap data FETCH karte hain (Login ke waqt):
+u_df_clean = users_df.copy()
+
+# Phone column se single quote (') aur '.0' hatana taake match sahi ho
+u_df_clean['Phone'] = u_df_clean['Phone'].astype(str).str.replace("'", "", regex=False).str.replace(".0", "", regex=False).str.strip()
+
+# Ab matching bilkul sahi hogi
+user = u_df_clean[(u_df_clean['Phone'] == phone_input.strip()) & (u_df_clean['Password'].astype(str) == pass_input)]
+
+# ========================================================
 # STEP 3: SESSION STATE & HELPERS
 # ========================================================
 if 'logged_in' not in st.session_state:
@@ -79,6 +107,34 @@ if not st.session_state.logged_in:
             requests.post(SCRIPT_URL, json={"action":"register", "name":r_name, "phone":normalize_ph(r_ph), "password":r_pw})
             st.success("Registered! Wait for approval.")
     st.stop()
+
+# ========================================================
+# FIXING '0' MISSING ISSUE (Updated Step)
+# ========================================================
+
+# Jab aap data save karte hain (Registration ya Update mein):
+if st.button("Submit"):
+    # Phone number ke shuru mein ' add karna taake Sheet 0 na hataye
+    formatted_phone = f"'{phone_input}" if not phone_input.startswith("'") else phone_input
+    
+    payload = {
+        "action": "register", # ya update_photo
+        "name": u_name,
+        "phone": formatted_phone, # Ab ye '0300...' save hoga
+        "password": u_pass,
+        # baqi fields...
+    }
+    
+    # ... baki requests.post wala code ...
+
+# Jab aap data FETCH karte hain (Login ke waqt):
+u_df_clean = users_df.copy()
+
+# Phone column se single quote (') aur '.0' hatana taake match sahi ho
+u_df_clean['Phone'] = u_df_clean['Phone'].astype(str).str.replace("'", "", regex=False).str.replace(".0", "", regex=False).str.strip()
+
+# Ab matching bilkul sahi hogi
+user = u_df_clean[(u_df_clean['Phone'] == phone_input.strip()) & (u_df_clean['Password'].astype(str) == pass_input)]
 
 # ========================================================
 # STEP 5: SIDEBAR
@@ -300,6 +356,34 @@ elif menu == "💬 Feedback":
                 st.rerun() # Refresh karke Dashboard par bhej dein
         else:
             st.warning("⚠️ Please type a message before submitting.")
+
+# ========================================================
+# FIXING '0' MISSING ISSUE (Updated Step)
+# ========================================================
+
+# Jab aap data save karte hain (Registration ya Update mein):
+if st.button("Submit"):
+    # Phone number ke shuru mein ' add karna taake Sheet 0 na hataye
+    formatted_phone = f"'{phone_input}" if not phone_input.startswith("'") else phone_input
+    
+    payload = {
+        "action": "register", # ya update_photo
+        "name": u_name,
+        "phone": formatted_phone, # Ab ye '0300...' save hoga
+        "password": u_pass,
+        # baqi fields...
+    }
+    
+    # ... baki requests.post wala code ...
+
+# Jab aap data FETCH karte hain (Login ke waqt):
+u_df_clean = users_df.copy()
+
+# Phone column se single quote (') aur '.0' hatana taake match sahi ho
+u_df_clean['Phone'] = u_df_clean['Phone'].astype(str).str.replace("'", "", regex=False).str.replace(".0", "", regex=False).str.strip()
+
+# Ab matching bilkul sahi hogi
+user = u_df_clean[(u_df_clean['Phone'] == phone_input.strip()) & (u_df_clean['Password'].astype(str) == pass_input)]
 
 # ========================================================
 # STEP 16: UPDATED ADMIN PANEL & DASHBOARD (Integrated)
