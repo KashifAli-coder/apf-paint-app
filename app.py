@@ -8,6 +8,7 @@ import streamlit as st
 import base64
 import requests
 
+
 # ========================================================
 # STEP 1: CONFIGURATION & LINKS
 # ========================================================
@@ -115,11 +116,11 @@ if not st.session_state.logged_in:
                 st.warning("Tamam fields pur karein.")
     st.stop()
 
+
 # ========================================================
 # >>> START: STEP 5 (SIDEBAR & LOGOUT) <<<
 # ========================================================
 else:
-    # User ka data aur photo load karna
     u_name = st.session_state.user_data.get('Name', 'User')
     u_photo = st.session_state.user_data.get('Photo', '')
     raw_ph = str(st.session_state.user_data.get('Phone', '')).strip().replace('.0', '')
@@ -137,7 +138,6 @@ else:
     
     st.sidebar.markdown(f"<h3 style='text-align: center;'>👤 {u_name}</h3>", unsafe_allow_html=True)
     
-    # Navigation Menu
     nav = ["👤 Profile", "🛍️ New Order", "📜 History", "💬 Feedback"]
     if st.session_state.get('is_admin', False): 
         nav.append("🔐 Admin")
@@ -149,62 +149,64 @@ else:
         st.rerun()
 
 # ========================================================
-# >>> START: STEP 6 (USER PROFILE & CAMERA UPLOAD) <<<
+# >>> START: STEP 6 (USER PROFILE & POP-UP CAMERA) <<<
 # ========================================================
     if menu == "👤 Profile":
         st.header(f"👋 Welcome, {u_name}")
         
-        # --- SOCIAL MEDIA STYLE CIRCULAR PROFILE ---
+        # --- MODERN PROFILE UI WITH CAMERA ICON ---
         st.markdown("""
         <style>
-        .profile-wrapper { position: relative; width: 160px; margin: auto; padding: 10px; }
-        .main-profile-pic { width: 150px; height: 150px; border-radius: 50%; object-fit: cover; border: 5px solid #f0f2f6; box-shadow: 0px 4px 10px rgba(0,0,0,0.1); }
+        .profile-container { position: relative; width: 150px; margin: auto; }
+        .main-profile-pic { width: 150px; height: 150px; border-radius: 50%; object-fit: cover; border: 4px solid #3b82f6; }
+        .camera-icon { 
+            position: absolute; bottom: 5px; right: 5px; 
+            background: #3b82f6; color: white; border-radius: 50%; 
+            padding: 8px; border: 2px solid white; cursor: pointer;
+            box-shadow: 0px 2px 5px rgba(0,0,0,0.2);
+        }
         </style>
         """, unsafe_allow_html=True)
 
         display_img = u_photo if (u_photo and str(u_photo) != 'nan' and str(u_photo).strip() != "") else "https://cdn-icons-png.flaticon.com/512/149/149071.png"
         
+        # Profile UI display
         st.markdown(f'''
-        <div class="profile-wrapper">
+        <div class="profile-container">
             <img src="{display_img}" class="main-profile-pic">
+            <div class="camera-icon">📷</div>
         </div>
         ''', unsafe_allow_html=True)
 
-        st.write("<p style='text-align: center; font-size: 16px; font-weight: bold;'>Update Profile Photo</p>", unsafe_allow_html=True)
-
-        # --- LIVE CAMERA & FILE LOGIC (NO LARGE DRAG-DROP BOX) ---
-        # Do options: Camera ya Gallery
-        mode = st.radio("Choose Source:", ["📷 Live Camera", "📁 Gallery Photo"], horizontal=True, label_visibility="collapsed")
-        
-        img_file = None
-        if mode == "📷 Live Camera":
-            img_file = st.camera_input("Take a picture") # Seedha camera khulega
-        else:
-            # Simple file uploader (Shortened version)
-            img_file = st.file_uploader("Upload Image", type=["jpg", "png", "jpeg"], label_visibility="visible")
-
-        if img_file:
-            # Image process karna
-            img_bytes = img_file.read()
-            b64_data = base64.b64encode(img_bytes).decode('utf-8')
-            final_img = f"data:image/png;base64,{b64_data}"
+        # --- HIDDEN POP-UP LOGIC USING EXPANDER ---
+        # Click karne par options khulenge (Pop-up effect)
+        with st.expander("Click here to Change Photo ✏️"):
+            choice = st.radio("Select Source", ["None", "📷 Live Capture", "📁 Gallery Upload"], horizontal=True)
             
-            if st.button("Save Photo ✅", use_container_width=True):
-                try:
-                    with st.spinner("Uploading to Server..."):
-                        response = requests.post(SCRIPT_URL, json={
-                            "action": "update_photo", 
-                            "phone": raw_ph, 
-                            "photo": final_img
-                        })
-                        if response.status_code == 200:
+            img_file = None
+            if choice == "📷 Live Capture":
+                img_file = st.camera_input("Take Photo")
+            elif choice == "📁 Gallery Upload":
+                img_file = st.file_uploader("Choose File", type=["jpg", "png", "jpeg"], label_visibility="collapsed")
+
+            if img_file:
+                img_bytes = img_file.read()
+                b64_data = base64.b64encode(img_bytes).decode('utf-8')
+                final_img = f"data:image/png;base64,{b64_data}"
+                
+                if st.button("Confirm & Update ✅", use_container_width=True):
+                    try:
+                        with st.spinner("Saving..."):
+                            requests.post(SCRIPT_URL, json={
+                                "action": "update_photo", 
+                                "phone": raw_ph, 
+                                "photo": final_img
+                            })
                             st.session_state.user_data['Photo'] = final_img
-                            st.success("Profile Photo Updated!")
+                            st.success("Profile Updated!")
                             st.rerun()
-                        else:
-                            st.error("Server ne error diya!")
-                except Exception as e:
-                    st.error(f"Connection Error: {e}")
+                    except:
+                        st.error("Server connection failed!")
 
         st.divider()
         
