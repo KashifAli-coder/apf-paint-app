@@ -239,94 +239,114 @@ elif menu == "📜 History":
         st.dataframe(user_orders[['Date', 'Invoice_ID', 'Product', 'Bill', 'Status']], use_container_width=True)
 
 # ========================================================
-# STEP 15: FEEDBACK SYSTEM (Auto-Filled)
+# STEP 15: FANCY FEEDBACK SYSTEM (Updated Look)
 # ========================================================
 elif menu == "💬 Feedback":
-    st.header("Share Your Feedback")
+    st.subheader("🌟 Share Your Experience")
     
-    # Auto-display user info
-    st.text(f"Name: {u_name}")
-    st.text(f"Phone: {raw_ph}")
+    # Custom Fancy Card for User Info (Visual improvement as per screenshots)
+    st.markdown(f"""
+    <div style="background: white; padding: 25px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); border: 1px solid #f1f5f9; margin-bottom: 20px;">
+        <div style="color: #64748b; font-size: 0.9em; margin-bottom: 5px;">Customer Name</div>
+        <div style="color: #1e293b; font-weight: 600; font-size: 1.1em; margin-bottom: 15px;">👤 {u_name}</div>
+        <div style="color: #64748b; font-size: 0.9em; margin-bottom: 5px;">Phone Number</div>
+        <div style="color: #1e293b; font-weight: 600; font-size: 1.1em; margin-bottom: 15px;">📞 {raw_ph}</div>
+        <div style="color: #64748b; font-size: 0.9em; margin-bottom: 5px;">Current Date</div>
+        <div style="color: #1e293b; font-weight: 600; font-size: 1.1em;">📅 {datetime.now().strftime('%d %b, %Y')}</div>
+    </div>
+    """, unsafe_allow_html=True)
     
-    # Active feedback box
-    feedback_text = st.text_area("Write your message here...", placeholder="Type your experience...")
+    # Active Message Input with Placeholder
+    st.markdown("##### ✍️ Write your message")
+    f_msg = st.text_area("feedback_box", placeholder="Type your experience or suggestions here...", height=150, label_visibility="collapsed")
     
-    if st.button("Submit Feedback 📩"):
-        if feedback_text.strip():
-            f_payload = {
-                "action": "feedback", 
-                "name": u_name, 
-                "phone": raw_ph, 
-                "message": feedback_text
-            }
-            requests.post(SCRIPT_URL, json=f_payload)
-            st.success("Feedback saved to Google Sheet!")
+    if st.button("Submit Feedback 📩", use_container_width=True):
+        if f_msg.strip():
+            with st.spinner("Saving your feedback..."):
+                payload = {
+                    "action":"feedback", 
+                    "name":u_name, 
+                    "phone":raw_ph, 
+                    "message":f_msg,
+                    "date": datetime.now().strftime('%Y-%m-%d %H:%M')
+                }
+                requests.post(SCRIPT_URL, json=payload)
+                st.balloons()
+                st.success("✅ Thank you! Your feedback has been saved to Google Sheets.")
+                time.sleep(2)
+                st.rerun()
         else:
-            st.warning("Please enter a message.")
+            st.warning("⚠️ Please type a message before submitting.")
 
 # ========================================================
-# STEP 16 : ADMIN PANEL & DASHBOARD (Integrated)
+# STEP 16: UPDATED ADMIN PANEL & DASHBOARD (Integrated)
 # ========================================================
 elif menu == "🔐 Admin":
-    st.header("🛡️ Admin Control Center")
+    st.header("🛡️ Admin Management Console")
     
-    # --- STEP 17: ANALYTICS (Top Section) ---
+    # --- DASHBOARD: Analytics Metrics (Integrated as Step 16 Part) ---
     with st.container():
         st.markdown("### 📊 Business Overview")
-        col_s1, col_s2, col_s3 = st.columns(3)
+        col_m1, col_m2, col_m3 = st.columns(3)
         
-        # Calculations
-        revenue = orders_df[orders_df['Status'].str.contains("Paid|Confirmed", na=False)]['Bill'].sum()
-        total_o = len(orders_df)
-        active_u = len(users_df[users_df['Role'].str.lower() == 'user'])
+        # Calculations for metrics
+        total_rev = orders_df[orders_df['Status'].astype(str).str.contains("Paid|Confirmed", na=False)]['Bill'].sum()
+        total_ord = len(orders_df)
+        active_usr = len(users_df[users_df['Role'].astype(str).str.lower() == 'user'])
         
-        col_s1.metric("Total Revenue", f"Rs. {revenue}")
-        col_s2.metric("Total Orders", total_o)
-        col_s3.metric("Active Users", active_u)
+        col_m1.metric("Total Revenue", f"Rs. {total_rev}")
+        col_m2.metric("Total Orders", total_ord)
+        col_m3.metric("Active Users", active_usr)
         
-        # Sales Chart
+        # Sales Chart Visualization
         if not orders_df.empty:
-            sales_data = orders_df.copy()
-            sales_data['Date'] = pd.to_datetime(sales_data['Date']).dt.date
-            chart_df = sales_data.groupby('Date')['Bill'].sum().reset_index()
-            st.line_chart(chart_df.set_index('Date'))
+            sales_chart_df = orders_df.copy()
+            sales_chart_df['Date'] = pd.to_datetime(sales_chart_df['Date']).dt.date
+            chart_group = sales_chart_df.groupby('Date')['Bill'].sum().reset_index()
+            st.line_chart(chart_group.set_index('Date'))
         st.divider()
 
-    # --- STEP 16: MANAGEMENT TABS (Bottom Section) ---
-    ad_tab1, ad_tab2, ad_tab3 = st.tabs(["📦 Orders Manager", "👥 User Approvals", "📜 Full Logs"])
+    # --- MANAGEMENT: Action Tabs ---
+    tab_ord, tab_usr, tab_fdb = st.tabs(["📦 Orders Manager", "👥 User Approvals", "💬 Feedback Logs"])
     
-    with ad_tab1:
+    with tab_ord:
         st.subheader("Manage Active Orders")
-        p_orders = orders_df[orders_df['Status'].str.contains("Order|Pending", na=False)]
-        if p_orders.empty:
-            st.info("Abhi koi naya order nahi hai.")
+        # Filter for orders that need attention
+        active_o = orders_df[orders_df['Status'].astype(str).str.contains("Order|Pending", na=False)]
+        if active_o.empty:
+            st.info("No active orders found.")
         else:
-            for idx, row in p_orders.iterrows():
-                with st.expander(f"Order {row['Invoice_ID']} - {row['Name']}"):
-                    st.write(f"**Items:** {row['Product']} | **Bill:** Rs.{row['Bill']}")
+            for idx, r in active_o.iterrows():
+                with st.expander(f"Order {r['Invoice_ID']} - {r['Name']}"):
+                    st.write(f"**Products:** {r['Product']}")
+                    st.write(f"**Bill:** Rs.{r['Bill']} | **Method:** {r['Payment_Method']}")
+                    
                     c_p, c_d = st.columns(2)
-                    if c_p.button("Mark Paid ✅", key=f"adm_p_{idx}"):
-                        requests.post(SCRIPT_URL, json={"action": "mark_paid", "phone": row['Phone'], "product": row['Product']})
+                    if c_p.button("Mark Paid ✅", key=f"btn_p_{idx}"):
+                        requests.post(SCRIPT_URL, json={"action": "mark_paid", "phone": normalize_ph(r['Phone']), "product": r['Product']})
                         st.rerun()
-                    if c_d.button("Delete 🗑️", key=f"adm_d_{idx}"):
-                        requests.post(SCRIPT_URL, json={"action": "delete_order", "phone": row['Phone'], "product": row['Product']})
+                    if c_d.button("Delete 🗑️", key=f"btn_d_{idx}"):
+                        requests.post(SCRIPT_URL, json={"action": "delete_order", "phone": normalize_ph(r['Phone']), "product": r['Product']})
                         st.rerun()
 
-    with ad_tab2:
-        st.subheader("New User Requests")
-        p_regs = users_df[users_df['Role'].str.lower() == 'pending']
-        if p_regs.empty:
-            st.info("Koi user pending nahi hai.")
+    with tab_usr:
+        st.subheader("User Verification")
+        p_users = users_df[users_df['Role'].astype(str).str.lower() == 'pending']
+        if p_users.empty:
+            st.info("No pending approvals.")
         else:
-            for idx, u_row in p_regs.iterrows():
-                u_ph_fix = normalize_ph(u_row['Phone'])
-                st.write(f"👤 **{u_row['Name']}** ({u_ph_fix})")
-                if st.button(f"Approve {u_row['Name']} ✅", key=f"adm_u_{idx}"):
-                    requests.post(SCRIPT_URL, json={"action": "approve_user", "phone": u_ph_fix})
-                    st.success("User Approved!")
+            for idx, ur in p_users.iterrows():
+                u_ph_formatted = normalize_ph(ur['Phone']) # Fix for .0 formatting
+                st.write(f"👤 **{ur['Name']}** ({u_ph_formatted})")
+                if st.button(f"Approve {ur['Name']} ✅", key=f"btn_u_{idx}"):
+                    requests.post(SCRIPT_URL, json={"action": "approve_user", "phone": u_ph_formatted})
+                    st.success(f"{ur['Name']} approved!")
                     time.sleep(1)
                     st.rerun()
 
-    with ad_tab3:
-        st.subheader("Complete Data Logs")
-        st.dataframe(orders_df, use_container_width=True)
+    with tab_fdb:
+        st.subheader("Customer Reviews")
+        if feedback_df.empty:
+            st.info("No feedback messages yet.")
+        else:
+            st.dataframe(feedback_df[['Date', 'Name', 'Phone', 'Message']], use_container_width=True)
