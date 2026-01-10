@@ -149,75 +149,96 @@ else:
         st.rerun()
 
 # ========================================================
-# >>> START: STEP 6 (USER PROFILE & POP-UP CAMERA) <<<
+# >>> START: STEP 6 (USER PROFILE & POP-UP) <<<
 # ========================================================
-    if menu == "👤 Profile":
-        st.header(f"👋 Welcome, {u_name}")
-        
-        # --- MODERN PROFILE UI WITH CAMERA ICON ---
-        st.markdown("""
-        <style>
-        .profile-container { position: relative; width: 150px; margin: auto; }
-        .main-profile-pic { width: 150px; height: 150px; border-radius: 50%; object-fit: cover; border: 4px solid #3b82f6; }
-        .camera-icon { 
-            position: absolute; bottom: 5px; right: 5px; 
-            background: #3b82f6; color: white; border-radius: 50%; 
-            padding: 8px; border: 2px solid white; cursor: pointer;
-            box-shadow: 0px 2px 5px rgba(0,0,0,0.2);
-        }
-        </style>
-        """, unsafe_allow_html=True)
+if menu == "👤 Profile":
+    st.header(f"👋 Welcome, {u_name}")
+    
+    # --- PROFESSIONAL UI WITHOUT BLUE CIRCLE ---
+    st.markdown("""
+    <style>
+    .profile-container { 
+        position: relative; 
+        width: 150px; 
+        margin: auto; 
+        display: block;
+    }
+    .main-profile-pic { 
+        width: 150px; 
+        height: 150px; 
+        border-radius: 50%; 
+        object-fit: cover; 
+        border: 2px solid #eeeeee; /* Light border instead of blue */
+        box-shadow: 0px 4px 10px rgba(0,0,0,0.1);
+    }
+    /* Simple Edit Label Style */
+    .edit-label {
+        text-align: center;
+        font-size: 14px;
+        color: #3b82f6;
+        cursor: pointer;
+        font-weight: bold;
+        margin-top: 10px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
-        display_img = u_photo if (u_photo and str(u_photo) != 'nan' and str(u_photo).strip() != "") else "https://cdn-icons-png.flaticon.com/512/149/149071.png"
-        
-        # Profile UI display
-        st.markdown(f'''
-        <div class="profile-container">
-            <img src="{display_img}" class="main-profile-pic">
-            <div class="camera-icon">📷</div>
-        </div>
-        ''', unsafe_allow_html=True)
+    # Image Display
+    display_img = u_photo if (u_photo and str(u_photo) != 'nan' and str(u_photo).strip() != "") else "https://cdn-icons-png.flaticon.com/512/149/149071.png"
+    
+    st.markdown(f'''
+    <div class="profile-container">
+        <img src="{display_img}" class="main-profile-pic">
+    </div>
+    ''', unsafe_allow_html=True)
 
-        # --- HIDDEN POP-UP LOGIC USING EXPANDER ---
-        # Click karne par options khulenge (Pop-up effect)
-        with st.expander("Click here to Change Photo ✏️"):
-            choice = st.radio("Select Source", ["None", "📷 Live Capture", "📁 Gallery Upload"], horizontal=True)
-            
-            img_file = None
-            if choice == "📷 Live Capture":
-                img_file = st.camera_input("Take Photo")
-            elif choice == "📁 Gallery Upload":
-                img_file = st.file_uploader("Choose File", type=["jpg", "png", "jpeg"], label_visibility="collapsed")
-
-            if img_file:
-                img_bytes = img_file.read()
-                b64_data = base64.b64encode(img_bytes).decode('utf-8')
-                final_img = f"data:image/png;base64,{b64_data}"
+    # --- CLICKABLE CAMERA ICON POPUP ---
+    # Hum 'st.popover' use karenge jo modern popup dialog box deta hai
+    with st.container():
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col2:
+            # Ye button camera icon ki tarah kaam karega aur popup kholega
+            with st.popover("📷 Change Photo", use_container_width=True):
+                choice = st.radio("Choose Source:", ["Select Option", "📸 Live Capture", "🖼️ Gallery"], label_visibility="collapsed")
                 
-                if st.button("Confirm & Update ✅", use_container_width=True):
-                    try:
-                        with st.spinner("Saving..."):
-                            requests.post(SCRIPT_URL, json={
-                                "action": "update_photo", 
-                                "phone": raw_ph, 
-                                "photo": final_img
-                            })
-                            st.session_state.user_data['Photo'] = final_img
-                            st.success("Profile Updated!")
-                            st.rerun()
-                    except:
-                        st.error("Server connection failed!")
+                img_file = None
+                if choice == "📸 Live Capture":
+                    # Direct camera khulega
+                    img_file = st.camera_input("Take a photo")
+                elif choice == "🖼️ Gallery":
+                    # Sirf file select karne ka option, koi bada drag-drop box nahi
+                    img_file = st.file_uploader("Upload Image", type=["jpg", "png", "jpeg"], label_visibility="collapsed")
 
-        st.divider()
-        
-        # User details display
-        c1, c2 = st.columns(2)
-        with c1:
-            st.info(f"**Name:**\n{u_name}")
-        with c2:
-            st.info(f"**Phone:**\n{display_ph}")
-        
-        st.write(f"**Account Type:** {st.session_state.user_data.get('Role', 'User')}")
+                if img_file:
+                    img_bytes = img_file.read()
+                    b64_data = base64.b64encode(img_bytes).decode('utf-8')
+                    final_img = f"data:image/png;base64,{b64_data}"
+                    
+                    if st.button("Update Now ✅", use_container_width=True):
+                        try:
+                            with st.spinner("Saving..."):
+                                requests.post(SCRIPT_URL, json={
+                                    "action": "update_photo", 
+                                    "phone": raw_ph, 
+                                    "photo": final_img
+                                })
+                                st.session_state.user_data['Photo'] = final_img
+                                st.success("Updated!")
+                                st.rerun()
+                        except:
+                            st.error("Connection error!")
+
+    st.divider()
+    
+    # User info (Social Media Cards style)
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown(f"**Name** \n{u_name}")
+    with c2:
+        st.markdown(f"**Phone** \n{display_ph}")
+    
+    st.caption(f"Account Type: {st.session_state.user_data.get('Role', 'User')}")
+
 
 # ========================================================
 # STEP 7: ORDER - PRODUCT SELECTION
