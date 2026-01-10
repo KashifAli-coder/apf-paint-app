@@ -13,7 +13,7 @@ import requests
 # STEP 1: CONFIGURATION & LINKS
 # ========================================================
 SHEET_ID = "1fIOaGMR3-M_t2dtYYuloFH7rSiFha_HDxfO6qaiEmDk"
-SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxv-OdNzCYKYCvtklLiUGL-VAzMWUP6tOxf2AQoxrqTVDnJwF0uBlrJDyH-yyeUOTN0/exec"
+SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwLQRD3dIUkQbNUi-Blo5WvBYqauD6NgMtYXDsC6-H1JLOgKShx8N5-ASHaNOR-QlOQ/exec"
 JAZZCASH_NO = "03005508112"
 EASYPAISA_NO = "03005508112"
 
@@ -190,25 +190,23 @@ if menu == "👤 Profile":
                     
                     if st.button("Update Now ✅", use_container_width=True):
                         try:
-                            with st.spinner("Saving..."):
-                                # 1. Server ko data bhejna
-                                response = requests.post(SCRIPT_URL, json={
+                            with st.spinner("Saving to Cloud..."):
+                                payload = {
                                     "action": "update_photo", 
                                     "phone": raw_ph, 
                                     "photo": final_img
-                                })
+                                }
+                                response = requests.post(SCRIPT_URL, json=payload)
                                 
-                                # 2. Agar server success response de
-                                if response.status_code == 200:
-                                    # Session state ko nayi image se update karein
+                                # App Script se "Photo Updated" ka jawab aana chahiye
+                                if "Photo Updated" in response.text:
                                     st.session_state.user_data['Photo'] = final_img
-                                    st.success("Updated Successfully!")
-                                    # 3. Forced Refresh taake image dikhne lage
+                                    st.success("Profile Photo Saved in Cloud!")
                                     st.rerun()
                                 else:
-                                    st.error("Server update failed!")
+                                    st.error(f"Server Error: {response.text}")
                         except Exception as e:
-                            st.error(f"Error: {str(e)}")
+                            st.error(f"Connection error: {e}")
 
 # ========================================================
 # STEP 7: ORDER - PRODUCT SELECTION (Indentation Fixed)
