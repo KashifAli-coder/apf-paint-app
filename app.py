@@ -183,21 +183,32 @@ if menu == "👤 Profile":
                 img_file = st.file_uploader("Upload Image", type=["jpg", "png", "jpeg"], label_visibility="collapsed")
 
             if img_file:
-                import base64
-                img_bytes = img_file.read()
-                b64_data = base64.b64encode(img_bytes).decode('utf-8')
-                final_img = f"data:image/png;base64,{b64_data}"
-                
-                if st.button("Update Now ✅", use_container_width=True):
-                    try:
-                        with st.spinner("Saving..."):
-                            requests.post(SCRIPT_URL, json={"action": "update_photo", "phone": raw_ph, "photo": final_img})
-                            st.session_state.user_data['Photo'] = final_img
-                            st.success("Updated!")
-                            st.rerun()
-                    except:
-                        st.error("Connection error!")
-    st.divider()
+                    import base64
+                    img_bytes = img_file.read()
+                    b64_data = base64.b64encode(img_bytes).decode('utf-8')
+                    final_img = f"data:image/png;base64,{b64_data}"
+                    
+                    if st.button("Update Now ✅", use_container_width=True):
+                        try:
+                            with st.spinner("Saving..."):
+                                # 1. Server ko data bhejna
+                                response = requests.post(SCRIPT_URL, json={
+                                    "action": "update_photo", 
+                                    "phone": raw_ph, 
+                                    "photo": final_img
+                                })
+                                
+                                # 2. Agar server success response de
+                                if response.status_code == 200:
+                                    # Session state ko nayi image se update karein
+                                    st.session_state.user_data['Photo'] = final_img
+                                    st.success("Updated Successfully!")
+                                    # 3. Forced Refresh taake image dikhne lage
+                                    st.rerun()
+                                else:
+                                    st.error("Server update failed!")
+                        except Exception as e:
+                            st.error(f"Error: {str(e)}")
 
 # ========================================================
 # STEP 7: ORDER - PRODUCT SELECTION (Indentation Fixed)
