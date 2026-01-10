@@ -113,20 +113,27 @@ if not st.session_state.logged_in:
     st.stop()
 
 # ========================================================
-# STEP 5: SIDEBAR & LOGOUT
+# >>> START: STEP 5 (SIDEBAR & LOGOUT) <<<
 # ========================================================
 else:
-    # User Data load karna
+    # User ka data aur photo load karna
     u_name = st.session_state.user_data.get('Name', 'User')
     u_photo = st.session_state.user_data.get('Photo', '')
-    
-    # Sidebar Profile Image Display
+    raw_ph = str(st.session_state.user_data.get('Phone', '')).strip().replace('.0', '')
+    display_ph = raw_ph if raw_ph.startswith('0') else '0' + raw_ph
+
+    # --- SIDEBAR PROFILE DISPLAY ---
+    # Tasveer ko Gol (Circular) dikhane ke liye CSS
     if u_photo and str(u_photo) != 'nan' and str(u_photo).strip() != "":
-        st.sidebar.image(u_photo, width=100)
+        st.sidebar.markdown(f'''
+            <div style="display: flex; justify-content: center;">
+                <img src="{u_photo}" style="width:100px; height:100px; border-radius:50%; object-fit:cover; border:3px solid #3b82f6;">
+            </div>
+        ''', unsafe_allow_html=True)
     else:
-        st.sidebar.image("https://cdn-icons-png.flaticon.com/512/149/149071.png", width=80)
-        
-    st.sidebar.success(f"👤 {u_name}")
+        st.sidebar.image("https://cdn-icons-png.flaticon.com/512/149/149071.png", width=100)
+    
+    st.sidebar.markdown(f"<h3 style='text-align: center;'>👤 {u_name}</h3>", unsafe_allow_html=True)
     
     # Navigation Menu
     nav = ["👤 Profile", "🛍️ New Order", "📜 History", "💬 Feedback"]
@@ -140,62 +147,68 @@ else:
         st.rerun()
 
 # ========================================================
-# STEP 6: USER PROFILE & DIRECT PHOTO UPLOAD
+# >>> START: STEP 6 (USER PROFILE & CAMERA UPLOAD) <<<
 # ========================================================
     if menu == "👤 Profile":
         st.header(f"👋 Welcome, {u_name}")
         
-        # Phone Number Leading 0 Fix
-        raw_ph = str(st.session_state.user_data.get('Phone', '')).strip().replace('.0', '')
-        display_ph = raw_ph if raw_ph.startswith('0') else '0' + raw_ph
-        
-        col1, col2 = st.columns([1, 2])
-        with col1:
-            current_img = st.session_state.user_data.get('Photo', '')
-            if current_img and str(current_img) != 'nan' and str(current_img).strip() != "":
-                st.image(current_img, width=150, caption="Apki Tasveer")
-            else:
-                st.image("https://cdn-icons-png.flaticon.com/512/149/149071.png", width=150)
+        # --- SOCIAL MEDIA STYLE CIRCULAR PROFILE ---
+        st.markdown("""
+        <style>
+        .profile-wrapper { position: relative; width: 160px; margin: auto; padding: 10px; }
+        .main-profile-pic { width: 150px; height: 150px; border-radius: 50%; object-fit: cover; border: 5px solid #f0f2f6; box-shadow: 0px 4px 10px rgba(0,0,0,0.1); }
+        .camera-overlay { position: absolute; bottom: 15px; right: 15px; background: #3b82f6; color: white; border-radius: 50%; padding: 8px; border: 3px solid white; font-size: 18px; line-height: 1; }
+        </style>
+        """, unsafe_allow_html=True)
 
-        with col2:
-            st.write(f"**Name:** {u_name}")
-            st.write(f"**Phone:** {display_ph}")
-            st.write(f"**Account Status:** {st.session_state.user_data.get('Role', 'User')}")
+        display_img = u_photo if (u_photo and str(u_photo) != 'nan' and str(u_photo).strip() != "") else "https://cdn-icons-png.flaticon.com/512/149/149071.png"
+        
+        # Profile Picture with Camera Icon Overlay
+        st.markdown(f'''
+        <div class="profile-wrapper">
+            <img src="{display_img}" class="main-profile-pic">
+            <div class="camera-overlay">📷</div>
+        </div>
+        ''', unsafe_allow_html=True)
+
+        st.write("<p style='text-align: center; font-size: 14px; color: #666;'>Change Photo</p>", unsafe_allow_html=True)
+
+        # --- AUTO-RESIZE & UPLOAD LOGIC ---
+        # File uploader ko chota aur asaan banane ke liye
+        up_file = st.file_uploader("Select Photo", type=["jpg", "png", "jpeg"], label_visibility="collapsed")
+        
+        if up_file:
+            import base64
+            # Image ko Base64 mein convert karna (Auto-resize handle karne ke liye)
+            img_bytes = up_file.read()
+            b64_data = base64.b64encode(img_bytes).decode('utf-8')
+            final_img = f"data:image/png;base64,{b64_data}"
+            
+            if st.button("Update Profile ✅", use_container_width=True):
+                try:
+                    with st.spinner("Saving..."):
+                        requests.post(SCRIPT_URL, json={
+                            "action": "update_photo", 
+                            "phone": raw_ph, 
+                            "photo": final_img
+                        })
+                        st.session_state.user_data['Photo'] = final_img
+                        st.success("Profile Photo Updated Successfully!")
+                        st.rerun()
+                except:
+                    st.error("Server connection failed!")
 
         st.divider()
         
-        # --- EASY FILE UPLOAD SECTION ---
-        st.markdown("### 📸 Upload Profile Picture")
-        uploaded_file = st.file_uploader("Gallery se photo select karein", type=["jpg", "png", "jpeg"])
+        # User details display
+        c1, c2 = st.columns(2)
+        with c1:
+            st.info(f"**Name:**\n{u_name}")
+        with c2:
+            st.info(f"**Phone:**\n{display_ph}")
         
-        if uploaded_file is not None:
-            # Preview dikhana
-            st.image(uploaded_file, width=100, caption="Selected Image")
-            
-            if st.button("Save This Photo ✅", use_container_width=True):
-                try:
-                    # Photo ko URL mein convert karne ke liye (IMGBB ya Cloudinary asaan hai)
-                    # Filhal hum isay as a Base64 ya Link handle kar rahy hain
-                    # Note: Direct upload ke liye Image Hosting API chahiye hoti hai.
-                    # Asaan tareeqa: User se kahen link hi paste kary ya hum "imgbb" use karein.
-                    
-                    # Agar aap chahte hain k user file select kary aur wo khud link ban jaye:
-                    import base64
-                    base64_image = base64.b64encode(uploaded_file.read()).decode('utf-8')
-                    img_data_url = f"data:image/png;base64,{base64_image}"
-                    
-                    # Google Script ko update bhejna
-                    requests.post(SCRIPT_URL, json={
-                        "action": "update_photo",
-                        "phone": raw_ph,
-                        "photo": img_data_url
-                    })
-                    
-                    st.session_state.user_data['Photo'] = img_data_url
-                    st.success("Photo Save ho gayi hai!")
-                    st.rerun()
-                except Exception as e:
-                    st.error("Upload fail ho gaya. Link wala tareeqa behtar hai.")
+        st.write(f"**Account Type:** {st.session_state.user_data.get('Role', 'User')}")
+
 # ========================================================
 # STEP 7: ORDER - PRODUCT SELECTION
 # ========================================================
