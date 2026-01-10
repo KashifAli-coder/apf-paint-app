@@ -152,33 +152,15 @@ else:
 # >>> START: STEP 6 (USER PROFILE & POP-UP) <<<
 # ========================================================
 if menu == "👤 Profile":
-    st.header(f"👋 Welcome, {u_name}")
+    st.header(f"👋 Hi, {u_name}")
     
-    # --- PROFESSIONAL UI WITHOUT BLUE CIRCLE ---
+    # --- CSS Section ---
     st.markdown("""
     <style>
-    .profile-container { 
-        position: relative; 
-        width: 150px; 
-        margin: auto; 
-        display: block;
-    }
+    .profile-container { position: relative; width: 150px; margin: auto; display: block; }
     .main-profile-pic { 
-        width: 150px; 
-        height: 150px; 
-        border-radius: 50%; 
-        object-fit: cover; 
-        border: 2px solid #eeeeee; /* Light border instead of blue */
-        box-shadow: 0px 4px 10px rgba(0,0,0,0.1);
-    }
-    /* Simple Edit Label Style */
-    .edit-label {
-        text-align: center;
-        font-size: 14px;
-        color: #3b82f6;
-        cursor: pointer;
-        font-weight: bold;
-        margin-top: 10px;
+        width: 150px; height: 150px; border-radius: 50%; object-fit: cover; 
+        border: 2px solid #eeeeee; box-shadow: 0px 4px 10px rgba(0,0,0,0.1); 
     }
     </style>
     """, unsafe_allow_html=True)
@@ -186,79 +168,57 @@ if menu == "👤 Profile":
     # Image Display
     display_img = u_photo if (u_photo and str(u_photo) != 'nan' and str(u_photo).strip() != "") else "https://cdn-icons-png.flaticon.com/512/149/149071.png"
     
-    st.markdown(f'''
-    <div class="profile-container">
-        <img src="{display_img}" class="main-profile-pic">
-    </div>
-    ''', unsafe_allow_html=True)
+    st.markdown(f'<div class="profile-container"><img src="{display_img}" class="main-profile-pic"></div>', unsafe_allow_html=True)
 
-    # --- CLICKABLE CAMERA ICON POPUP ---
-    # Hum 'st.popover' use karenge jo modern popup dialog box deta hai
-    with st.container():
-        col1, col2, col3 = st.columns([1, 1, 1])
-        with col2:
-            # Ye button camera icon ki tarah kaam karega aur popup kholega
-            with st.popover("📷 Change Photo", use_container_width=True):
-                choice = st.radio("Choose Source:", ["Select Option", "📸 Live Capture", "🖼️ Gallery"], label_visibility="collapsed")
+    # Popover Button
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col2:
+        with st.popover("📷 Change Photo", use_container_width=True):
+            choice = st.radio("Choose Source:", ["Select Option", "📸 Live Capture", "🖼️ Gallery"], label_visibility="collapsed")
+            
+            img_file = None
+            if choice == "📸 Live Capture":
+                img_file = st.camera_input("Take a photo")
+            elif choice == "🖼️ Gallery":
+                img_file = st.file_uploader("Upload Image", type=["jpg", "png", "jpeg"], label_visibility="collapsed")
+
+            if img_file:
+                import base64
+                img_bytes = img_file.read()
+                b64_data = base64.b64encode(img_bytes).decode('utf-8')
+                final_img = f"data:image/png;base64,{b64_data}"
                 
-                img_file = None
-                if choice == "📸 Live Capture":
-                    # Direct camera khulega
-                    img_file = st.camera_input("Take a photo")
-                elif choice == "🖼️ Gallery":
-                    # Sirf file select karne ka option, koi bada drag-drop box nahi
-                    img_file = st.file_uploader("Upload Image", type=["jpg", "png", "jpeg"], label_visibility="collapsed")
-
-                if img_file:
-                    img_bytes = img_file.read()
-                    b64_data = base64.b64encode(img_bytes).decode('utf-8')
-                    final_img = f"data:image/png;base64,{b64_data}"
-                    
-                    if st.button("Update Now ✅", use_container_width=True):
-                        try:
-                            with st.spinner("Saving..."):
-                                requests.post(SCRIPT_URL, json={
-                                    "action": "update_photo", 
-                                    "phone": raw_ph, 
-                                    "photo": final_img
-                                })
-                                st.session_state.user_data['Photo'] = final_img
-                                st.success("Updated!")
-                                st.rerun()
-                        except:
-                            st.error("Connection error!")
-
+                if st.button("Update Now ✅", use_container_width=True):
+                    try:
+                        with st.spinner("Saving..."):
+                            requests.post(SCRIPT_URL, json={"action": "update_photo", "phone": raw_ph, "photo": final_img})
+                            st.session_state.user_data['Photo'] = final_img
+                            st.success("Updated!")
+                            st.rerun()
+                    except:
+                        st.error("Connection error!")
     st.divider()
-    
-    # User info (Social Media Cards style)
-    c1, c2 = st.columns(2)
-    with c1:
-        st.markdown(f"**Name** \n{u_name}")
-    with c2:
-        st.markdown(f"**Phone** \n{display_ph}")
-    
-    st.caption(f"Account Type: {st.session_state.user_data.get('Role', 'User')}")
-
 
 # ========================================================
-# STEP 7: ORDER - PRODUCT SELECTION
+# STEP 7: ORDER - PRODUCT SELECTION (Indentation Fixed)
 # ========================================================
-    elif menu == "🛍️ New Order":
-        st.header("🛒 Create New Order")
-        scat = st.selectbox("Category", settings_df['Category'].unique())
-        sprod = st.selectbox("Product", settings_df[settings_df['Category']==scat]['Product Name'])
-        prc = float(settings_df[settings_df['Product Name']==sprod]['Price'].values[0])
-        
-        dq = st.session_state.cart[st.session_state.edit_idx]['Qty'] if st.session_state.edit_idx is not None else 1
-        qty = st.number_input("Quantity", min_value=1, value=dq)
-        
-        if st.button("Update Item ✏️" if st.session_state.edit_idx is not None else "Add to Cart ➕", use_container_width=True):
-            item = {"Product": sprod, "Qty": qty, "Price": prc, "Total": prc * qty}
-            if st.session_state.edit_idx is not None:
-                st.session_state.cart[st.session_state.edit_idx] = item
-                st.session_state.edit_idx = None
-            else: st.session_state.cart.append(item)
-            st.rerun()
+elif menu == "🛍️ New Order":  # <--- Yeh line 'if' ke bilkul niche honi chahiye
+    st.header("🛒 Create New Order")
+    scat = st.selectbox("Category", settings_df['Category'].unique())
+    sprod = st.selectbox("Product", settings_df[settings_df['Category']==scat]['Product Name'])
+    prc = float(settings_df[settings_df['Product Name']==sprod]['Price'].values[0])
+    
+    dq = st.session_state.cart[st.session_state.edit_idx]['Qty'] if st.session_state.edit_idx is not None else 1
+    qty = st.number_input("Quantity", min_value=1, value=dq)
+    
+    if st.button("Update Item ✏️" if st.session_state.edit_idx is not None else "Add to Cart ➕", use_container_width=True):
+        item = {"Product": sprod, "Qty": qty, "Price": prc, "Total": prc * qty}
+        if st.session_state.edit_idx is not None:
+            st.session_state.cart[st.session_state.edit_idx] = item
+            st.session_state.edit_idx = None
+        else: 
+            st.session_state.cart.append(item)
+        st.rerun()
 
 # ========================================================
 # STEP 8: ORDER - REVIEW TABLE (Original Design)
