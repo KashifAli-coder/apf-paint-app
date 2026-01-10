@@ -239,12 +239,16 @@ elif menu == "📜 History":
         st.dataframe(user_orders[['Date', 'Invoice_ID', 'Product', 'Bill', 'Status']], use_container_width=True)
 
 # ========================================================
-# STEP 15: FANCY FEEDBACK SYSTEM (Updated Look)
+# STEP 15: FANCY FEEDBACK SYSTEM (Auto-Reset & Redirect)
 # ========================================================
 elif menu == "💬 Feedback":
     st.subheader("🌟 Share Your Experience")
     
-    # Custom Fancy Card for User Info (Visual improvement as per screenshots)
+    # 1. Session State Initialize (Text area ko khali karne ke liye)
+    if 'feedback_text' not in st.session_state:
+        st.session_state.feedback_text = ""
+
+    # Custom Fancy Card for User Info
     st.markdown(f"""
     <div style="background: white; padding: 25px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); border: 1px solid #f1f5f9; margin-bottom: 20px;">
         <div style="color: #64748b; font-size: 0.9em; margin-bottom: 5px;">Customer Name</div>
@@ -256,9 +260,16 @@ elif menu == "💬 Feedback":
     </div>
     """, unsafe_allow_html=True)
     
-    # Active Message Input with Placeholder
+    # 2. Text Area connected to Session State
     st.markdown("##### ✍️ Write your message")
-    f_msg = st.text_area("feedback_box", placeholder="Type your experience or suggestions here...", height=150, label_visibility="collapsed")
+    f_msg = st.text_area(
+        "feedback_box", 
+        value=st.session_state.feedback_text,
+        placeholder="Type your experience or suggestions here...", 
+        height=150, 
+        label_visibility="collapsed",
+        key="f_input" # Unique key for state management
+    )
     
     if st.button("Submit Feedback 📩", use_container_width=True):
         if f_msg.strip():
@@ -270,11 +281,23 @@ elif menu == "💬 Feedback":
                     "message":f_msg,
                     "date": datetime.now().strftime('%Y-%m-%d %H:%M')
                 }
+                # Google Sheets Update
                 requests.post(SCRIPT_URL, json=payload)
+                
+                # Feedback Effects
                 st.balloons()
-                st.success("✅ Thank you! Your feedback has been saved to Google Sheets.")
-                time.sleep(2)
-                st.rerun()
+                st.success("✅ Thank you! Your feedback has been saved.")
+                
+                # 3. Logic: Clear Box and Move to Dashboard
+                time.sleep(1.5) # User ko success message dekhne ka mauka dein
+                st.session_state.feedback_text = "" # Box khali karein
+                
+                # Sidebar menu ko "Dashboard" par redirect karne ke liye
+                # Note: 'Dashboard' wahi spelling honi chahiye jo aapke sidebar radio button mein hai
+                if 'menu' in st.session_state:
+                    st.session_state.menu = "🏠 Dashboard" # Menu index reset (Aapka Dashboard icon ke mutabiq)
+                
+                st.rerun() # Refresh karke Dashboard par bhej dein
         else:
             st.warning("⚠️ Please type a message before submitting.")
 
