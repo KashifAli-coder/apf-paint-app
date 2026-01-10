@@ -4,6 +4,9 @@ import requests
 from datetime import datetime
 from io import BytesIO
 from reportlab.pdfgen import canvas
+import streamlit as st
+import base64
+import requests
 
 # ========================================================
 # STEP 1: CONFIGURATION & LINKS
@@ -123,7 +126,6 @@ else:
     display_ph = raw_ph if raw_ph.startswith('0') else '0' + raw_ph
 
     # --- SIDEBAR PROFILE DISPLAY ---
-    # Tasveer ko Gol (Circular) dikhane ke liye CSS
     if u_photo and str(u_photo) != 'nan' and str(u_photo).strip() != "":
         st.sidebar.markdown(f'''
             <div style="display: flex; justify-content: center;">
@@ -157,46 +159,52 @@ else:
         <style>
         .profile-wrapper { position: relative; width: 160px; margin: auto; padding: 10px; }
         .main-profile-pic { width: 150px; height: 150px; border-radius: 50%; object-fit: cover; border: 5px solid #f0f2f6; box-shadow: 0px 4px 10px rgba(0,0,0,0.1); }
-        .camera-overlay { position: absolute; bottom: 15px; right: 15px; background: #3b82f6; color: white; border-radius: 50%; padding: 8px; border: 3px solid white; font-size: 18px; line-height: 1; }
         </style>
         """, unsafe_allow_html=True)
 
         display_img = u_photo if (u_photo and str(u_photo) != 'nan' and str(u_photo).strip() != "") else "https://cdn-icons-png.flaticon.com/512/149/149071.png"
         
-        # Profile Picture with Camera Icon Overlay
         st.markdown(f'''
         <div class="profile-wrapper">
             <img src="{display_img}" class="main-profile-pic">
-            <div class="camera-overlay">📷</div>
         </div>
         ''', unsafe_allow_html=True)
 
-        st.write("<p style='text-align: center; font-size: 14px; color: #666;'>Change Photo</p>", unsafe_allow_html=True)
+        st.write("<p style='text-align: center; font-size: 16px; font-weight: bold;'>Update Profile Photo</p>", unsafe_allow_html=True)
 
-        # --- AUTO-RESIZE & UPLOAD LOGIC ---
-        # File uploader ko chota aur asaan banane ke liye
-        up_file = st.file_uploader("Select Photo", type=["jpg", "png", "jpeg"], label_visibility="collapsed")
+        # --- LIVE CAMERA & FILE LOGIC (NO LARGE DRAG-DROP BOX) ---
+        # Do options: Camera ya Gallery
+        mode = st.radio("Choose Source:", ["📷 Live Camera", "📁 Gallery Photo"], horizontal=True, label_visibility="collapsed")
         
-        if up_file:
-            import base64
-            # Image ko Base64 mein convert karna (Auto-resize handle karne ke liye)
-            img_bytes = up_file.read()
+        img_file = None
+        if mode == "📷 Live Camera":
+            img_file = st.camera_input("Take a picture") # Seedha camera khulega
+        else:
+            # Simple file uploader (Shortened version)
+            img_file = st.file_uploader("Upload Image", type=["jpg", "png", "jpeg"], label_visibility="visible")
+
+        if img_file:
+            # Image process karna
+            img_bytes = img_file.read()
             b64_data = base64.b64encode(img_bytes).decode('utf-8')
             final_img = f"data:image/png;base64,{b64_data}"
             
-            if st.button("Update Profile ✅", use_container_width=True):
+            if st.button("Save Photo ✅", use_container_width=True):
                 try:
-                    with st.spinner("Saving..."):
-                        requests.post(SCRIPT_URL, json={
+                    with st.spinner("Uploading to Server..."):
+                        response = requests.post(SCRIPT_URL, json={
                             "action": "update_photo", 
                             "phone": raw_ph, 
                             "photo": final_img
                         })
-                        st.session_state.user_data['Photo'] = final_img
-                        st.success("Profile Photo Updated Successfully!")
-                        st.rerun()
-                except:
-                    st.error("Server connection failed!")
+                        if response.status_code == 200:
+                            st.session_state.user_data['Photo'] = final_img
+                            st.success("Profile Photo Updated!")
+                            st.rerun()
+                        else:
+                            st.error("Server ne error diya!")
+                except Exception as e:
+                    st.error(f"Connection Error: {e}")
 
         st.divider()
         
