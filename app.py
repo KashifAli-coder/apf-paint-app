@@ -240,35 +240,56 @@ elif menu == "📜 History":
     st.dataframe(u_ords[['Date', 'Invoice_ID', 'Product', 'Status']], use_container_width=True)
 
 # ========================================================
-# STEP 15: FEEDBACK (FIXED ERROR LINE 230)
+# STEP 15: FEEDBACK SYSTEM (FIXING LINE 267 ERROR)
 # ========================================================
 elif menu == "💬 Feedback":
-    st.subheader("🌟 Give Feedback")
+    st.subheader("🌟 Share Your Experience")
     
-    # Text area for feedback
-    f_input = st.text_area("Your Message", placeholder="Type here...", key="f_box")
+    # User Details Display
+    st.markdown(f"""
+    <div style="background: #f8f9fa; padding: 15px; border-radius: 10px; border-left: 5px solid #3b82f6;">
+        <b>Customer:</b> {u_name}<br>
+        <b>Phone:</b> {raw_ph}<br>
+        <b>Date:</b> {datetime.now().strftime('%d %b, %Y')}
+    </div><br>
+    """, unsafe_allow_html=True)
     
-    if st.button("Submit Feedback 📩"):
-        if st.session_state.f_box.strip():
-            with st.spinner("Saving..."):
+    # Input Area - Hum 'key' use kar rahe hain taake state control ho sake
+    f_msg = st.text_area("Write message", placeholder="Apna feedback yahan likhein...", height=150, key="feedback_text")
+    
+    if st.button("Submit Feedback 📩", use_container_width=True):
+        if st.session_state.feedback_text.strip():
+            with st.spinner("Saving your feedback..."):
+                # Data payload
                 payload = {
                     "action": "feedback", 
                     "name": u_name, 
                     "phone": raw_ph, 
-                    "message": st.session_state.f_box,
+                    "message": st.session_state.feedback_text, 
                     "date": datetime.now().strftime('%Y-%m-%d %H:%M')
                 }
-                requests.post(SCRIPT_URL, json=payload)
                 
-                st.balloons()
-                st.success("Redirecting to Dashboard...")
-                
-                # Input clear aur Redirection logic
-                st.session_state.menu_choice = "🏠 Dashboard"
-                time.sleep(1.5)
-                st.rerun() # Is line par error fix kar diya gaya hai
+                # Sending data to Google Sheets
+                try:
+                    requests.post(SCRIPT_URL, json=payload)
+                    st.balloons()
+                    st.success("✅ Feedback saved! Redirecting to Dashboard...")
+                    
+                    # ERROR FIX (Line 267 logic):
+                    # Pehle input clear karein
+                    st.session_state.feedback_text = ""
+                    # Phir menu choice ko Dashboard par set karein
+                    st.session_state.menu_choice = "🏠 Dashboard"
+                    
+                    # Thora sa wait taake user success msg dekh le
+                    time.sleep(1.5)
+                    
+                    # Final Step: App ko refresh kar ke Dashboard par le jayein
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error sending feedback: {e}")
         else:
-            st.warning("Please type something.")
+            st.warning("⚠️ Kuch likhna zaroori hai.")
 
 # ========================================================
 # STEP 16: UPDATED ADMIN PANEL & DASHBOARD
