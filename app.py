@@ -15,12 +15,11 @@ SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwLQRD3dIUkQbNUi-Blo5WvBYq
 JAZZCASH_NO = "03005508112"
 EASYPAISA_NO = "03005508112"
 
-# --- UI Styling (No Blue Circles) ---
+# --- UI Styling ---
 st.markdown("""
 <style>
     .stButton>button { width: 100%; border-radius: 8px; background-color: #3b82f6; color: white; border: none; }
     .stSidebar { background-color: #ffffff; }
-    /* Profile Pic styling without blue circle */
     .profile-img { width: 120px; height: 120px; border-radius: 50%; object-fit: cover; border: 2px solid #eeeeee; }
 </style>
 """, unsafe_allow_html=True)
@@ -62,6 +61,7 @@ if not st.session_state.logged_in:
         pw_l = st.text_input("Password", type="password", key="l_pw")
         if st.button("Login 🚀"):
             u_ph = normalize_ph(ph_l)
+            # Admin login fix: Dono numbers ko normalize kiya
             match = users_df[(users_df['Phone'].apply(normalize_ph) == u_ph) & (users_df['Password'].astype(str) == pw_l)]
             if not match.empty:
                 user_row = match.iloc[0]
@@ -80,7 +80,6 @@ if not st.session_state.logged_in:
             st.success("Registered! Wait for approval.")
     st.stop()
 
-
 # ========================================================
 # STEP 5: SIDEBAR
 # ========================================================
@@ -89,7 +88,6 @@ else:
     u_photo = st.session_state.user_data.get('Photo', '')
     raw_ph = normalize_ph(st.session_state.user_data.get('Phone', ''))
     
-    # Sidebar Profile Image (No blue border)
     sidebar_img = u_photo if (u_photo and str(u_photo) != 'nan') else "https://cdn-icons-png.flaticon.com/512/149/149071.png"
     st.sidebar.markdown(f'<div style="text-align:center"><img src="{sidebar_img}" class="profile-img"></div>', unsafe_allow_html=True)
     st.sidebar.markdown(f"<h3 style='text-align: center;'>👤 {u_name}</h3>", unsafe_allow_html=True)
@@ -101,7 +99,7 @@ else:
         st.session_state.clear(); st.rerun()
 
 # ========================================================
-# STEP 6: PROFILE (Fix: Pop-up & Border)
+# STEP 6: PROFILE
 # ========================================================
 if menu == "👤 Profile":
     st.header(f"👋 Hi, {u_name}")
@@ -123,19 +121,16 @@ if menu == "👤 Profile":
                     st.session_state.user_data['Photo'] = final
                     st.success("Updated!"); time.sleep(1); st.rerun()
 
-
 # ========================================================
 # STEP 7: ORDER - PRODUCT SELECTION
 # ========================================================
 elif menu == "🛍️ New Order":
     st.header("🛒 Create New Order")
     
-    # Category and Product Selection
     scat = st.selectbox("Category", settings_df['Category'].unique())
     sub_df = settings_df[settings_df['Category'] == scat]
     sprod = st.selectbox("Product", sub_df['Product Name'])
     
-    # Price and Quantity
     prc = float(sub_df[sub_df['Product Name'] == sprod]['Price'].values[0])
     qty = st.number_input("Quantity", min_value=1, value=1)
     
@@ -201,7 +196,6 @@ elif menu == "🛍️ New Order":
             invoice_id = f"APF-{int(time.time())}"
             all_products = ", ".join([f"{x['Qty']}x {x['Product']}" for x in st.session_state.cart])
             
-            # Send Data to Google Sheets
             order_payload = {
                 "action": "order", 
                 "invoice_id": invoice_id,
@@ -213,11 +207,10 @@ elif menu == "🛍️ New Order":
             }
             requests.post(SCRIPT_URL, json=order_payload)
             
-            # Generate PDF for Download
             pdf_data = create_pdf_invoice(invoice_id, u_name, all_products, total_bill)
             st.download_button("📥 Download Receipt", pdf_data, file_name=f"{invoice_id}.pdf")
             
-            st.session_state.cart = [] # Cart reset
+            st.session_state.cart = [] 
             st.success("Order Placed Successfully!")
 
 # ========================================================
@@ -228,7 +221,7 @@ elif menu == "🛍️ New Order":
             st.markdown(f'<a href="{wa_link}" target="_blank">📲 Send WhatsApp Confirmation</a>', unsafe_allow_html=True)
 
 # ========================================================
-# STEP 14: ORDER HISTORY (User Section)
+# STEP 14: ORDER HISTORY
 # ========================================================
 elif menu == "📜 History":
     st.header("Your Order History")
@@ -240,16 +233,11 @@ elif menu == "📜 History":
         st.dataframe(user_orders[['Date', 'Invoice_ID', 'Product', 'Bill', 'Status']], use_container_width=True)
 
 # ========================================================
-# STEP 15: FANCY FEEDBACK SYSTEM (Auto-Reset & Redirect)
+# STEP 15: FANCY FEEDBACK SYSTEM (Auto-Reset Fix)
 # ========================================================
 elif menu == "💬 Feedback":
     st.subheader("🌟 Share Your Experience")
     
-    # 1. Session State Initialize (Text area ko khali karne ke liye)
-    if 'feedback_text' not in st.session_state:
-        st.session_state.feedback_text = ""
-
-    # Custom Fancy Card for User Info
     st.markdown(f"""
     <div style="background: white; padding: 25px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); border: 1px solid #f1f5f9; margin-bottom: 20px;">
         <div style="color: #64748b; font-size: 0.9em; margin-bottom: 5px;">Customer Name</div>
@@ -261,60 +249,47 @@ elif menu == "💬 Feedback":
     </div>
     """, unsafe_allow_html=True)
     
-    # 2. Text Area connected to Session State
     st.markdown("##### ✍️ Write your message")
+    # key='f_input' hi session state handle karega
     f_msg = st.text_area(
         "feedback_box", 
-        value=st.session_state.feedback_text,
         placeholder="Type your experience or suggestions here...", 
         height=150, 
         label_visibility="collapsed",
-        key="f_input" # Unique key for state management
+        key="f_input" 
     )
     
     if st.button("Submit Feedback 📩", use_container_width=True):
-        if f_msg.strip():
+        if st.session_state.f_input.strip():
             with st.spinner("Saving your feedback..."):
                 payload = {
                     "action":"feedback", 
                     "name":u_name, 
                     "phone":raw_ph, 
-                    "message":f_msg,
+                    "message":st.session_state.f_input,
                     "date": datetime.now().strftime('%Y-%m-%d %H:%M')
                 }
-                # Google Sheets Update
                 requests.post(SCRIPT_URL, json=payload)
-                
-                # Feedback Effects
                 st.balloons()
                 st.success("✅ Thank you! Your feedback has been saved.")
                 
-                # 3. Logic: Clear Box and Move to Dashboard
-                time.sleep(1.5) # User ko success message dekhne ka mauka dein
-                st.session_state.feedback_text = "" # Box khali karein
-                
-                # Sidebar menu ko "Dashboard" par redirect karne ke liye
-                # Note: 'Dashboard' wahi spelling honi chahiye jo aapke sidebar radio button mein hai
-                if 'menu' in st.session_state:
-                    st.session_state.menu = "🏠 Dashboard" # Menu index reset (Aapka Dashboard icon ke mutabiq)
-                
-                st.rerun() # Refresh karke Dashboard par bhej dein
+                time.sleep(1.5)
+                # Correction: Yahan box clear ho raha hai
+                st.session_state.f_input = "" 
+                st.rerun()
         else:
             st.warning("⚠️ Please type a message before submitting.")
 
-
 # ========================================================
-# STEP 16: UPDATED ADMIN PANEL & DASHBOARD (Integrated)
+# STEP 16: UPDATED ADMIN PANEL & DASHBOARD
 # ========================================================
 elif menu == "🔐 Admin":
     st.header("🛡️ Admin Management Console")
     
-    # --- DASHBOARD: Analytics Metrics (Integrated as Step 16 Part) ---
     with st.container():
         st.markdown("### 📊 Business Overview")
         col_m1, col_m2, col_m3 = st.columns(3)
         
-        # Calculations for metrics
         total_rev = orders_df[orders_df['Status'].astype(str).str.contains("Paid|Confirmed", na=False)]['Bill'].sum()
         total_ord = len(orders_df)
         active_usr = len(users_df[users_df['Role'].astype(str).str.lower() == 'user'])
@@ -323,7 +298,6 @@ elif menu == "🔐 Admin":
         col_m2.metric("Total Orders", total_ord)
         col_m3.metric("Active Users", active_usr)
         
-        # Sales Chart Visualization
         if not orders_df.empty:
             sales_chart_df = orders_df.copy()
             sales_chart_df['Date'] = pd.to_datetime(sales_chart_df['Date']).dt.date
@@ -331,12 +305,10 @@ elif menu == "🔐 Admin":
             st.line_chart(chart_group.set_index('Date'))
         st.divider()
 
-    # --- MANAGEMENT: Action Tabs ---
     tab_ord, tab_usr, tab_fdb = st.tabs(["📦 Orders Manager", "👥 User Approvals", "💬 Feedback Logs"])
     
     with tab_ord:
         st.subheader("Manage Active Orders")
-        # Filter for orders that need attention
         active_o = orders_df[orders_df['Status'].astype(str).str.contains("Order|Pending", na=False)]
         if active_o.empty:
             st.info("No active orders found.")
@@ -361,7 +333,7 @@ elif menu == "🔐 Admin":
             st.info("No pending approvals.")
         else:
             for idx, ur in p_users.iterrows():
-                u_ph_formatted = normalize_ph(ur['Phone']) # Fix for .0 formatting
+                u_ph_formatted = normalize_ph(ur['Phone'])
                 st.write(f"👤 **{ur['Name']}** ({u_ph_formatted})")
                 if st.button(f"Approve {ur['Name']} ✅", key=f"btn_u_{idx}"):
                     requests.post(SCRIPT_URL, json={"action": "approve_user", "phone": u_ph_formatted})
@@ -375,4 +347,3 @@ elif menu == "🔐 Admin":
             st.info("No feedback messages yet.")
         else:
             st.dataframe(feedback_df[['Date', 'Name', 'Phone', 'Message']], use_container_width=True)
-
