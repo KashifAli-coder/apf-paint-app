@@ -15,7 +15,7 @@ EASYPAISA_NO = "03005508112"
 
 st.set_page_config(page_title="Paint Pro Store", layout="wide")
 
-# Custom Global CSS for modern look (Wahi jo aapne design kiya)
+# Custom Global CSS for modern look
 st.markdown("""
     <style>
     .stApp { background-color: #f4f7f6; }
@@ -48,12 +48,10 @@ def normalize_ph(n):
     if s and not s.startswith('0'): return '0' + s
     return s
 
-# Invoice Generator Fix (Line 182 fix)
 def get_next_invoice(df):
     if df.empty or 'Invoice_ID' not in df.columns:
         return "0001"
     try:
-        # Numerically find the last invoice and add 1
         last_inv = pd.to_numeric(df['Invoice_ID'], errors='coerce').max()
         if pd.isna(last_inv): return "0001"
         return f"{int(last_inv) + 1:04d}"
@@ -71,7 +69,7 @@ def set_nav(target):
     st.rerun()
 
 # ========================================================
-# STEP 4: LOGIN & REGISTER (Your Design)
+# STEP 4: LOGIN & REGISTER
 # ========================================================
 if not st.session_state.logged_in:
     cols = st.columns([1, 2, 1])
@@ -175,7 +173,6 @@ elif menu == "🛍️ New Order":
             sprod = st.selectbox("Product Name", cat_items['Product Name'].unique())
             p_data = cat_items[cat_items['Product Name'] == sprod].iloc[0]
             
-            # Special Color Rate Logic
             all_colors_raw = [c.strip() for c in str(p_data['Colors']).split(',')]
             oos_colors = [c.strip() for c in str(p_data.get('Out_of_Stock_Colors', '')).split(',')]
             available_colors = [c for c in all_colors_raw if c.split(':')[0] not in oos_colors and c != '']
@@ -187,7 +184,6 @@ elif menu == "🛍️ New Order":
                 if c.startswith(selected_color_name) and ":" in c:
                     extra_charge = float(c.split(':')[-1].replace('+', ''))
 
-            # Packing & Base Price logic
             valid_packs = []
             for p in ["20kg", "Gallon", "Quarter"]:
                 if float(p_data.get(f"Price_{p}", 0)) > 0: valid_packs.append(p)
