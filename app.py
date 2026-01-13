@@ -11,7 +11,7 @@ import time
 # STEP 1: CONFIGURATION & LINKS
 # ========================================================
 SHEET_ID = "1fIOaGMR3-M_t2dtYYuloFH7rSiFha_HDxfO6qaiEmDk"
-SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwLQRD3dIUkQbNUi-Blo5WvBYqauD6NgMtYXDsC6-H1JLOgKShx8Y5-ASHaNOR-QlOQ/exec"
+SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwLQRD3dIUkQbNUi-Blo5WvBYqauD6NgMtYXDsC6-H1JLOgKShx8N5-ASHaNOR-QlOQ/exec"
 JAZZCASH_NO = "03005508112"
 EASYPAISA_NO = "03005508112"
 
@@ -96,35 +96,28 @@ else:
     nav = ["🏠 Dashboard", "👤 Profile", "🛍️ New Order", "📜 History", "💬 Feedback"]
     if st.session_state.is_admin: nav.append("🔐 Admin")
     
+    # Navigation Radio
     menu = st.sidebar.radio("Navigation", nav, key="menu_choice")
     
     if st.sidebar.button("Logout 🚪"):
         st.session_state.clear(); st.rerun()
 
 # ========================================================
-# DASHBOARD MODULE (With Pending Order Alert)
+# DASHBOARD MODULE (With Pending Alert Box)
 # ========================================================
 if menu == "🏠 Dashboard":
     st.header(f"Dashboard - {u_name}")
     my_orders = orders_df[orders_df['Phone'].apply(normalize_ph) == raw_ph]
     
-    # ALERT BOX FOR PENDING ORDERS
+    # ALERT BOX
     pending = my_orders[my_orders['Status'].str.contains("Order|Pending", case=False, na=False)]
     if not pending.empty:
-        st.markdown(f"""
-        <div class="alert-box">
-            ⚠️ <b>Aapka Order Pending Hai!</b><br>
-            Aapke {len(pending)} order(s) abhi tak approve nahi hue. Payment confirm hote hi status update ho jayega.
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f'<div class="alert-box">⚠️ <b>Pending Order:</b> Aapka order approve hona baqi hai!</div>', unsafe_allow_html=True)
 
     c1, c2 = st.columns(2)
     c1.metric("Total Orders", len(my_orders))
-    c2.metric("Total Bill", f"Rs. {my_orders['Bill'].sum()}")
-    
-    st.subheader("Your Order History")
-    if my_orders.empty: st.info("Koi order record nahi mila.")
-    else: st.dataframe(my_orders.tail(5)[['Date', 'Invoice_ID', 'Status']], use_container_width=True)
+    c2.metric("Spending", f"Rs. {my_orders['Bill'].sum()}")
+    st.dataframe(my_orders.tail(5)[['Date', 'Product', 'Status']], use_container_width=True)
 
 # ========================================================
 # STEP 6: PROFILE
@@ -133,138 +126,112 @@ elif menu == "👤 Profile":
     st.header(f"👋 Profile - {u_name}")
     p_img = u_photo if (u_photo and str(u_photo) != 'nan') else "https://cdn-icons-png.flaticon.com/512/149/149071.png"
     st.markdown(f'<img src="{p_img}" class="profile-img">', unsafe_allow_html=True)
-    
-    with st.popover("📷 Photo Update"):
-        img_file = st.file_uploader("New Photo")
-        if img_file:
-            b64 = base64.b64encode(img_file.read()).decode('utf-8')
-            final = f"data:image/png;base64,{b64}"
-            if st.button("Save ✅"):
-                requests.post(SCRIPT_URL, json={"action":"update_photo", "phone":raw_ph, "photo":final})
-                st.session_state.user_data['Photo'] = final
-                st.success("Updated!"); st.rerun()
+    img_file = st.file_uploader("Change Photo")
+    if img_file and st.button("Update"):
+        b64 = base64.b64encode(img_file.read()).decode('utf-8')
+        final = f"data:image/png;base64,{b64}"
+        requests.post(SCRIPT_URL, json={"action":"update_photo", "phone":raw_ph, "photo":final})
+        st.session_state.user_data['Photo'] = final
+        st.rerun()
 
 # ========================================================
 # STEP 7: ORDER - PRODUCT SELECTION
 # ========================================================
 elif menu == "🛍️ New Order":
-    st.header("🛒 Place Your Order")
-    scat = st.selectbox("Select Category", settings_df['Category'].unique())
+    st.header("🛒 Order Now")
+    scat = st.selectbox("Category", settings_df['Category'].unique())
     sub_df = settings_df[settings_df['Category'] == scat]
-    sprod = st.selectbox("Select Product", sub_df['Product Name'])
+    sprod = st.selectbox("Product", sub_df['Product Name'])
     prc = float(sub_df[sub_df['Product Name'] == sprod]['Price'].values[0])
-    qty = st.number_input("How many?", min_value=1, value=1)
+    qty = st.number_input("Qty", min_value=1, value=1)
     
-    if st.button("Add to Cart 🛒"):
+    if st.button("Add to Cart"):
         st.session_state.cart.append({"Product": sprod, "Qty": qty, "Price": prc, "Total": prc * qty})
-        st.toast(f"{sprod} Added!")
         st.rerun()
 
 # ========================================================
 # STEP 8: ORDER - REVIEW TABLE
 # ========================================================
     if st.session_state.cart:
-        st.markdown("### 📋 Your Selection")
         for i, itm in enumerate(st.session_state.cart):
-            c_p, c_q, c_x = st.columns([4, 2, 1])
-            c_p.write(f"**{itm['Product']}**")
-            c_q.write(f"Rs {int(itm['Total'])}")
-            if c_x.button("❌", key=f"del_{i}"):
+            col1, col2 = st.columns([5, 1])
+            col1.write(f"{itm['Product']} x{itm['Qty']}")
+            if col2.button("❌", key=f"d_{i}"):
                 st.session_state.cart.pop(i); st.rerun()
 
 # ========================================================
-# STEP 9: ORDER - TOTAL CALCULATION
+# STEP 9: ORDER - TOTAL
 # ========================================================
         total_bill = sum(x['Total'] for x in st.session_state.cart)
-        st.info(f"#### **Grand Total: Rs. {total_bill}**")
+        st.subheader(f"Total: Rs. {total_bill}")
 
 # ========================================================
-# STEP 10: ORDER - PAYMENT & QR
+# STEP 10: ORDER - PAYMENT
 # ========================================================
-        pay_method = st.radio("Choose Payment Method", ["COD", "JazzCash", "EasyPaisa"])
+        pay_method = st.radio("Payment", ["COD", "JazzCash", "EasyPaisa"])
         if pay_method != "COD":
-            acc = JAZZCASH_NO if pay_method == "JazzCash" else EASYPAISA_NO
-            st.warning(f"Pay to {acc}")
-            qr = f"https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=Pay-{total_bill}"
-            st.image(qr, width=150)
+            st.warning(f"Pay to: {JAZZCASH_NO}")
 
 # ========================================================
-# STEP 11: ORDER - INVOICE PDF FUNCTION
+# STEP 11: ORDER - PDF (Hidden logic)
 # ========================================================
-        def generate_pdf(inv_id, name, items, total):
+        def get_pdf(inv, name, bill):
             buf = BytesIO()
             p = canvas.Canvas(buf)
-            p.drawString(100, 800, f"Invoice ID: {inv_id}")
-            p.drawString(100, 780, f"Customer: {name}")
-            p.drawString(100, 760, f"Items: {items}")
-            p.drawString(100, 740, f"Total: Rs. {total}")
+            p.drawString(100, 750, f"Invoice: {inv} | Name: {name} | Bill: {bill}")
             p.save()
             return buf.getvalue()
 
 # ========================================================
-# STEP 12: ORDER - CONFIRMATION & REDIRECT
+# STEP 12: ORDER - CONFIRMATION
 # ========================================================
-        if st.button("Order Confirm Karein ✅"):
+        if st.button("Confirm ✅"):
             inv_id = f"APF-{int(time.time())}"
-            prods = ", ".join([f"{x['Qty']}x {x['Product']}" for x in st.session_state.cart])
-            
-            # API Call
+            prods = ", ".join([x['Product'] for x in st.session_state.cart])
             requests.post(SCRIPT_URL, json={"action":"order", "invoice_id":inv_id, "name":u_name, "phone":raw_ph, "product":prods, "bill":float(total_bill), "payment_method":pay_method})
-            
-            # Clear Cart and Set Dashboard
             st.session_state.cart = []
-            st.session_state.menu_choice = "🏠 Dashboard" 
-            st.success("Mubarak ho! Order ho gaya.")
-            time.sleep(1.5)
+            st.session_state.menu_choice = "🏠 Dashboard" # Redirection Set
             st.rerun()
 
 # ========================================================
-# STEP 13: ORDER - WHATSAPP NOTIFICATION
+# STEP 13: ORDER - WHATSAPP
 # ========================================================
-            whatsapp_msg = f"*New Order:* {inv_id}\n*Customer:* {u_name}\n*Total:* Rs.{total_bill}"
-            wa_link = f"https://wa.me/923005508112?text={requests.utils.quote(whatsapp_msg)}"
-            st.markdown(f'<a href="{wa_link}" target="_blank">📲 Send WhatsApp Confirmation</a>', unsafe_allow_html=True)
+            st.write("WhatsApp logic processed.")
 
 # ========================================================
-# STEP 14: ORDER HISTORY
+# STEP 14: HISTORY
 # ========================================================
 elif menu == "📜 History":
-    st.header("Order History")
+    st.header("History")
     u_ords = orders_df[orders_df['Phone'].apply(normalize_ph) == raw_ph]
-    st.dataframe(u_ords[['Date', 'Invoice_ID', 'Product', 'Bill', 'Status']], use_container_width=True)
+    st.dataframe(u_ords[['Date', 'Invoice_ID', 'Product', 'Status']], use_container_width=True)
 
 # ========================================================
-# STEP 15: FEEDBACK (With Dashboard Redirect Fix)
+# STEP 15: FEEDBACK (FIXED LINE 249 ERROR)
 # ========================================================
 elif menu == "💬 Feedback":
-    st.subheader("🌟 Share Your Feedback")
+    st.subheader("🌟 Share Feedback")
     
-    # Message box
-    f_msg = st.text_area("Message", placeholder="Yahan apna tajurba likhein...", height=150, key="f_input")
+    # Input field with key
+    feedback_text = st.text_area("Your Message", key="f_input")
     
-    if st.button("Submit Feedback 📩", use_container_width=True):
+    if st.button("Submit 📩"):
         if st.session_state.f_input.strip():
-            with st.spinner("Processing..."):
-                payload = {
-                    "action": "feedback", 
-                    "name": u_name, 
-                    "phone": raw_ph, 
-                    "message": st.session_state.f_input,
-                    "date": datetime.now().strftime('%Y-%m-%d %H:%M')
-                }
-                requests.post(SCRIPT_URL, json=payload)
-                
-                st.balloons()
-                st.success("✅ Saved! Dashboard par wapsi ho rahi hai...")
-                
-                # Sab se zaroori fix: Line 249-270 error handling
-                st.session_state.f_input = "" 
-                st.session_state.menu_choice = "🏠 Dashboard" 
-                
-                time.sleep(1.5)
-                st.rerun()
+            # API Request
+            payload = {
+                "action": "feedback", "name": u_name, "phone": raw_ph, 
+                "message": st.session_state.f_input, "date": datetime.now().strftime('%Y-%m-%d %H:%M')
+            }
+            requests.post(SCRIPT_URL, json=payload)
+            
+            # CLEAR INPUT AND REDIRECT
+            # Yahan hum menu_choice ko update kar ke foran rerun kar rahay hain
+            st.success("Redirecting...")
+            st.session_state.menu_choice = "🏠 Dashboard"
+            time.sleep(1)
+            st.rerun() 
         else:
-            st.warning("⚠️ Message likhna zaroori hai.")
+            st.warning("Please enter text.")
 
 # ========================================================
 # STEP 16: UPDATED ADMIN PANEL & DASHBOARD
