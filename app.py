@@ -15,7 +15,7 @@ EASYPAISA_NO = "03005508112"
 
 st.set_page_config(page_title="Paint Pro Store", layout="wide")
 
-# Custom Global CSS for modern look
+# Custom Global CSS
 st.markdown("""
     <style>
     .stApp { background-color: #f4f7f6; }
@@ -192,10 +192,13 @@ elif menu == "🛍️ New Order":
             base_price = float(p_data.get(f"Price_{packing}", 0))
             final_unit_price = base_price + extra_charge
             
-            st.markdown(f"""<div style="background:#e1effe; padding:15px; border-radius:10px; border-left:5px solid #3b82f6;">
-                <h3 style="margin:0; color:#1e40af;">Rate: Rs. {final_unit_price}</h3>
-                {"<small style='color:red;'>+ Special Color Rate Applied</small>" if extra_charge > 0 else ""}
-            </div>""", unsafe_allow_html=True)
+            # PRICE BOX FIX
+            st.markdown(f"""
+                <div style="background:#e1effe; padding:15px; border-radius:10px; border-left:5px solid #3b82f6; margin-top:10px; margin-bottom:10px;">
+                    <h3 style="margin:0; color:#1e40af;">Rate: Rs. {final_unit_price}</h3>
+                    {"<small style='color:red;'>+ Special Color Rate Applied</small>" if extra_charge > 0 else ""}
+                </div>
+            """, unsafe_allow_html=True)
             
             qty = st.number_input("Quantity", 1, 500, 1)
             if st.button("Add to List 🛒", use_container_width=True):
@@ -280,9 +283,12 @@ elif menu == "👤 Profile":
     st.markdown("### 👤 Profile Settings")
     c1, c2 = st.columns([1, 1])
     with c1:
-        st.markdown(f"""<div style="background: white; padding: 20px; border-radius: 15px; text-align: center; border: 1px solid #ddd;">
+        st.markdown(f"""
+            <div style="background: white; padding: 20px; border-radius: 15px; text-align: center; border: 1px solid #ddd;">
                 <img src="{sidebar_img}" style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover; margin-bottom: 10px;">
-                <h4>{u_name}</h4><p style="color: gray;">{raw_ph}</p></div>""", unsafe_allow_html=True)
+                <h4>{u_name}</h4><p style="color: gray;">{raw_ph}</p>
+            </div>
+        """, unsafe_allow_html=True)
     with c2:
         img_file = st.file_uploader("Change Avatar", type=['jpg','png'])
         if img_file and st.button("Save New Photo"):
