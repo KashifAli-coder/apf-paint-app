@@ -166,110 +166,129 @@ if menu == "🏠 Dashboard":
             """, unsafe_allow_html=True)
     else: st.info("No recent orders.")
 
-# ========================================================
-# UPDATED SMART ORDER MODULE
-# ========================================================
+# --- Invoice Generator Function ---
+def get_next_invoice(orders_df):
+    if orders_df.empty:
+        return "0001"
+    try:
+        # Last invoice number nikaalne ke liye
+        last_inv = orders_df['Invoice_ID'].iloc[-1]
+        next_val = int(last_inv) + 1
+        return f"{next_val:04d}"
+    except:
+        return f"{len(orders_df) + 1:04d}"
+
+# --- NEW ORDER & REVIEW MODULE ---
 elif menu == "🛍️ New Order":
     st.header("🛍️ Create New Order")
+    
     if not settings_df.empty:
         col_sel, col_cart = st.columns([1.5, 1])
         
         with col_sel:
-            # 1. Category & Product Selection
-            scat = st.selectbox("Select Category", settings_df['Category'].unique(), key="s_cat")
+            st.subheader("🎯 Select Product")
+            scat = st.selectbox("Category", settings_df['Category'].unique())
             cat_items = settings_df[settings_df['Category'] == scat]
             
-            sprod = st.selectbox("Product Name", cat_items['Product Name'].unique(), key="s_prod")
-            # Product ka saara data ek line mein utha liya
+            sprod = st.selectbox("Product Name", cat_items['Product Name'].unique())
             p_data = cat_items[cat_items['Product Name'] == sprod].iloc[0]
             
-            # 2. Colors Filter (Out of Stock handle karne ke liye)
-            all_colors = [c.strip() for c in str(p_data['Colors']).split(',')]
-            # Sheet mein jo color likhenge wo hide ho jayega
+            # Colors with Special Rate Logic
+            all_colors_raw = [c.strip() for c in str(p_data['Colors']).split(',')]
             oos_colors = [c.strip() for c in str(p_data.get('Out_of_Stock_Colors', '')).split(',')]
-            available_colors = [c for c in all_colors if c not in oos_colors and c != '']
+            available_colors = [c for c in all_colors_raw if c.split(':')[0] not in oos_colors and c != '']
             
-            selected_color = st.selectbox("Select Shade / Color", available_colors, key="s_color")
+            # Displaying Color Name but keeping rate logic hidden
+            color_options = [c.split(':')[0] for c in available_colors]
+            selected_color_name = st.selectbox("Select Color/Shade", color_options)
             
-            if not available_colors:
-                st.error("⚠️ All colors for this product are currently Out of Stock!")
+            # Find if selected color has extra charges
+            extra_charge = 0
+            for c in available_colors:
+                if c.startswith(selected_color_name) and ":" in c:
+                    extra_charge = float(c.split(':')[-1].replace('+', ''))
 
-            # 3. Packing & Dynamic Price Logic
-            # Hum check karenge ke sheet mein kin kin sizes ki prices di gayi hain
+            # Packing & Base Price
             valid_packs = []
             if float(p_data.get('Price_20kg', 0)) > 0: valid_packs.append("20kg")
             if float(p_data.get('Price_Gallon', 0)) > 0: valid_packs.append("Gallon")
             if float(p_data.get('Price_Quarter', 0)) > 0: valid_packs.append("Quarter")
             
-            packing = st.radio("Select Packing Size", valid_packs, horizontal=True, key="s_pack")
+            packing = st.radio("Select Packing Size", valid_packs, horizontal=True)
             
-            # Price auto-pick based on selection
-            price_col = f"Price_{packing}"
-            prc = float(p_data.get(price_col, 0))
-
+            # Final Price = Base Price + Extra Color Charge
+            base_price = float(p_data.get(f"Price_{packing}", 0))
+            final_unit_price = base_price + extra_charge
+            
             st.markdown(f"""
-                <div style="background-color: #f0f7ff; padding: 15px; border-radius: 10px; border: 1px solid #3b82f6; margin-top:10px;">
-                    <h2 style="margin:0; color: #1e40af;">Rate: Rs. {prc}</h2>
-                    <p style="margin:0; color: #3b82f6;">Selected: {sprod} | {packing}</p>
+                <div style="background:#f0f7ff; padding:10px; border-radius:10px; border:1px solid #3b82f6;">
+                    <h3 style="margin:0; color:#1e40af;">Rate: Rs. {final_unit_price}</h3>
+                    {"<small style='color:red;'>+ Special Color Charge included</small>" if extra_charge > 0 else ""}
                 </div>
             """, unsafe_allow_html=True)
             
-            qty = st.number_input("Quantity", 1, 500, 1, key="s_qty")
+            qty = st.number_input("Quantity", 1, 500, 1)
             
-            if st.button("Add to Cart 🛒", use_container_width=True, type="primary"):
-                if prc > 0:
-                    full_item = f"{sprod} ({packing})"
-                    st.session_state.cart.append({
-                        "Product": full_item, "Shade": selected_color, 
-                        "Qty": qty, "Price": prc, "Total": prc * qty
-                    })
-                    st.toast("Added to cart!")
-                    st.rerun()
-                else:
-                    st.error("Price not available for this selection.")
+            if st.button("Add to List 🛒", use_container_width=True):
+                st.session_state.cart.append({
+                    "Product": f"{sprod} ({packing})",
+                    "Shade": selected_color_name,
+                    "Qty": qty,
+                    "Price": final_unit_price,
+                    "Total": final_unit_price * qty
+                })
+                st.toast("Item Added!")
+                st.rerun()
 
         with col_cart:
-            # --- Cart Design (Aapka original design) ---
-            st.markdown("<div style='background: white; padding: 20px; border-radius: 15px; border: 1px solid #ddd;'>", unsafe_allow_html=True)
-            st.markdown("<h4>🛒 Shopping Cart</h4>", unsafe_allow_html=True)
+            st.markdown("<div style='background:white; padding:20px; border-radius:15px; border:1px solid #ddd;'>", unsafe_allow_html=True)
+            st.subheader("📋 Order Review")
             
             if not st.session_state.cart:
-                st.info("Cart is empty.")
+                st.info("No items added yet.")
             else:
                 total_bill = 0
                 for i, itm in enumerate(st.session_state.cart):
                     total_bill += itm['Total']
-                    st.markdown(f"**{itm['Product']}**<br><small>Color: {itm['Shade']} | {itm['Qty']} x {itm['Price']}</small>", unsafe_allow_html=True)
-                    if st.button(f"Remove", key=f"rm_{i}"):
+                    c1, c2 = st.columns([3, 1])
+                    c1.markdown(f"**{itm['Product']}**\n{itm['Shade']} | {itm['Qty']} x {itm['Price']}")
+                    if c2.button("❌", key=f"del_{i}"):
                         st.session_state.cart.pop(i)
                         st.rerun()
                 
                 st.divider()
-                st.subheader(f"Total: Rs. {total_bill}")
+                st.write(f"### Total: Rs. {total_bill}")
                 
-                # Order Confirmation & Payment (Wahi purana code)
+                # Order Actions
+                if st.button("Clear All", type="secondary"):
+                    st.session_state.cart = []
+                    st.rerun()
+                
+                st.divider()
                 pay_type = st.selectbox("Payment Method", ["COD", "JazzCash", "EasyPaisa", "Bank Transfer"])
                 
                 receipt_b64 = ""
                 if pay_type != "COD":
-                    r_file = st.file_uploader("Upload Receipt", type=['jpg','png','jpeg'])
+                    r_file = st.file_uploader("Upload Payment Screenshot", type=['jpg','png','jpeg'])
                     if r_file:
                         receipt_b64 = f"data:image/png;base64,{base64.b64encode(r_file.read()).decode()}"
 
-                if st.button("Confirm Order ✅", use_container_width=True):
+                if st.button("Finalize & Order ✅", use_container_width=True, type="primary"):
                     if pay_type != "COD" and not receipt_b64:
-                        st.error("Please upload receipt screenshot!")
+                        st.error("Please upload receipt first!")
                     else:
-                        inv = get_next_invoice(orders_df)
-                        prods = ", ".join([f"{x['Qty']}x {x['Product']} ({x['Shade']})" for x in st.session_state.cart])
+                        inv_no = get_next_invoice(orders_df)
+                        all_prods = ", ".join([f"{x['Qty']}x {x['Product']} ({x['Shade']})" for x in st.session_state.cart])
+                        
                         requests.post(SCRIPT_URL, json={
-                            "action":"order", "invoice_id":inv, "name":u_name, 
-                            "phone":raw_ph, "product":prods, "bill":total_bill, 
+                            "action":"order", "invoice_id":inv_no, "name":u_name, 
+                            "phone":raw_ph, "product":all_prods, "bill":total_bill, 
                             "payment_method":pay_type, "receipt": receipt_b64
                         })
                         st.session_state.cart = []
-                        st.success(f"Order {inv} Placed!")
-                        time.sleep(1); set_nav("🏠 Dashboard")
+                        st.success(f"Order #{inv_no} Successful!")
+                        time.sleep(2)
+                        set_nav("🏠 Dashboard")
             st.markdown("</div>", unsafe_allow_html=True)
 
 # --- HISTORY, ADMIN, PROFILE (Wahi Purana Design) ---
