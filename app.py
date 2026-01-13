@@ -166,43 +166,45 @@ if menu == "🏠 Dashboard":
             """, unsafe_allow_html=True)
     else: st.info("No recent orders.")
 
-# --- NEW ORDER (DYNAMIC FILTERING VERSION) ---
+# --- NEW ORDER (DYNAMIC SIZE & PRICE VERSION) ---
 elif menu == "🛍️ New Order":
     st.header("🛍️ Create New Order")
     if not settings_df.empty:
         col_sel, col_cart = st.columns([1.5, 1])
         with col_sel:
-            # 1. Category Filter
+            # 1. Category Select karein (e.g., Local Distemper)
             scat = st.selectbox("Select Category", settings_df['Category'].unique())
             cat_items = settings_df[settings_df['Category'] == scat]
             
-            # 2. Product Name Filter (Based on Category)
+            # 2. Product Select karein (Sirf us category ke products)
             sprod = st.selectbox("Product Name", cat_items['Product Name'].unique())
-            prod_data = cat_items[cat_items['Product Name'] == sprod].iloc[0]
+            prod_variations = cat_items[cat_items['Product Name'] == sprod]
             
-            # 3. Dynamic Sub-Category (Comma separated list in sheet)
-            sub_list = str(prod_data['Sub-Category']).split(',')
-            sub_cat = st.selectbox("Interior / Exterior", [s.strip() for s in sub_list])
+            # 3. Sub-Category Filter (Interior/Exterior)
+            # Pehli variation se sub-category list uthayi
+            sub_list = str(prod_variations.iloc[0]['Sub-Category']).split(',')
+            sub_cat = st.selectbox("Type", [s.strip() for s in sub_list])
             
-            # 4. Dynamic Packing (Comma separated list in sheet: 20kg, Gallon etc)
-            pack_list = str(prod_data['Packing']).split(',')
-            packing = st.selectbox("Select Packing Size", [p.strip() for p in pack_list])
+            # 4. DYNAMIC PACKING & PRICE (Sab se aham part)
+            # Ye sirf wahi sizes dikhayega jo us product ke liye sheet mein hain
+            packing = st.selectbox("Select Packing Size", prod_variations['Packing'].unique())
             
-            # 5. Dynamic Colors (Comma separated list in sheet)
-            color_list = str(prod_data['Colors']).split(',')
+            # Rate khud-ba-khud select ho jayega packing ke mutabiq
+            selected_row = prod_variations[prod_variations['Packing'] == packing].iloc[0]
+            prc = float(selected_row['Price'])
+            
+            # 5. COLORS LIST
+            color_list = str(selected_row['Colors']).split(',')
             selected_color = st.selectbox("Select Shade/Color", [c.strip() for c in color_list])
 
-            # Price and Quantity
-            prc = float(prod_data['Price'])
+            st.markdown(f"### 💰 Price: Rs. {prc}")
+            
             c1, c2 = st.columns(2)
             qty = c1.number_input("Quantity", 1, 500, 1)
-            st.info(f"Unit Price: Rs. {prc}")
             
             if st.button("Add to Cart 🛒", use_container_width=True):
-                # Cart display name includes all details
                 full_prod_name = f"{sprod} ({packing}) - {sub_cat}"
                 
-                # Check if exactly same item/shade already in cart
                 found = False
                 for itm in st.session_state.cart:
                     if itm['Product'] == full_prod_name and itm['Shade'] == selected_color:
@@ -219,10 +221,11 @@ elif menu == "🛍️ New Order":
                 st.rerun()
 
         with col_cart:
-            # ... (Cart design wahi rahega jo aapka pehle tha)
+            # --- Cart Design (Aapka original) ---
             st.markdown("<div style='background: white; padding: 20px; border-radius: 15px; border: 1px solid #ddd;'>", unsafe_allow_html=True)
             st.markdown("<h4>🛒 Shopping Cart</h4>", unsafe_allow_html=True)
-            if not st.session_state.cart: st.write("Cart is empty.")
+            if not st.session_state.cart: 
+                st.write("Cart is empty.")
             else:
                 total_bill = 0
                 for i, itm in enumerate(st.session_state.cart):
@@ -231,9 +234,35 @@ elif menu == "🛍️ New Order":
                     if st.button(f"Remove", key=f"rm_{i}"):
                         st.session_state.cart.pop(i)
                         st.rerun()
+                
                 st.divider()
                 st.subheader(f"Total: Rs. {total_bill}")
-                # ... (Baqi payment aur order placement ka code same rahega)
+                
+                # ... (Baqi invoice generation aur payment ka code same rahega)
+                pay_type = st.selectbox("Payment Method", ["COD", "JazzCash", "EasyPaisa", "Bank Transfer"])
+                
+                receipt_b64 = ""
+                if pay_type != "COD":
+                    st.info(f"Send to: {JAZZCASH_NO}")
+                    r_file = st.file_uploader("Upload Receipt", type=['jpg','png','jpeg'])
+                    if r_file:
+                        receipt_b64 = f"data:image/png;base64,{base64.b64encode(r_file.read()).decode()}"
+
+                if st.button("Confirm Order ✅", use_container_width=True, type="primary"):
+                    if pay_type != "COD" and not receipt_b64:
+                        st.error("Please upload receipt screenshot!")
+                    else:
+                        inv = get_next_invoice(orders_df)
+                        prods = ", ".join([f"{x['Qty']}x {x['Product']} ({x['Shade']})" for x in st.session_state.cart])
+                        requests.post(SCRIPT_URL, json={
+                            "action":"order", "invoice_id":inv, "name":u_name, 
+                            "phone":raw_ph, "product":prods, "bill":total_bill, 
+                            "payment_method":pay_type, "receipt": receipt_b64
+                        })
+                        st.session_state.cart = []
+                        st.success(f"Order {inv} Placed!")
+                        time.sleep(1); set_nav("🏠 Dashboard")
+            st.markdown("</div>", unsafe_allow_html=True)
 
 # --- HISTORY, ADMIN, PROFILE (Wahi Purana Design) ---
 # ... (Baqi code wahi rahega jo aapne diya hai)
