@@ -42,16 +42,14 @@ def load_all_data():
 users_df, settings_df, orders_df, feedback_df = load_all_data()
 
 # ========================================================
-# STEP 3: SESSION STATE & HELPERS
+# STEP 3: SESSION STATE (Add this small change)
 # ========================================================
 if 'logged_in' not in st.session_state:
-    st.session_state.update({'logged_in': False, 'user_data': {}, 'cart': [], 'is_admin': False, 'menu_choice': "🏠 Dashboard"})
-
-def normalize_ph(n):
-    s = str(n).strip().split('.')[0]
-    if s and not s.startswith('0'): return '0' + s
-    return s
-
+    st.session_state.update({
+        'logged_in': False, 'user_data': {}, 'cart': [], 'is_admin': False,
+        'menu_choice': "🏠 Dashboard",
+        'go_to_dashboard': False  # Naya variable redirection ke liye
+    })
 # ========================================================
 # STEP 4: LOGIN & REGISTER
 # ========================================================
@@ -79,6 +77,14 @@ if not st.session_state.logged_in:
             requests.post(SCRIPT_URL, json={"action":"register", "name":r_name, "phone":normalize_ph(r_ph), "password":r_pw})
             st.success("Registered! Wait for approval.")
     st.stop()
+
+# ========================================================
+# REDIRECTION LOGIC (Add this before Sidebar)
+# ========================================================
+if st.session_state.get('go_to_dashboard'):
+    st.session_state.menu_choice = "🏠 Dashboard"
+    st.session_state.go_to_dashboard = False
+    st.rerun()
 
 # ========================================================
 # STEP 5: SIDEBAR (Modified with Callback)
@@ -109,18 +115,19 @@ if menu == "🏠 Dashboard":
     st.header(f"Dashboard - Welcome {u_name}")
     my_orders = orders_df[orders_df['Phone'].apply(normalize_ph) == raw_ph]
     
-    # PENDING ALERT BOX
-    pending_orders = my_orders[my_orders['Status'].str.contains("Order|Pending", case=False, na=False)]
-    if not pending_orders.empty:
+    # ALERT BOX FOR PENDING ORDERS
+    pending = my_orders[my_orders['Status'].str.contains("Order|Pending", case=False, na=False)]
+    if not pending.empty:
         st.markdown(f"""
-        <div style="padding:15px; background-color:#fff3cd; color:#856404; border-radius:10px; border:1px solid #ffeeba; margin-bottom:10px;">
-            ⚠️ <b>Alert:</b> Aapke {len(pending_orders)} orders pending hain!
+        <div style="padding:15px; background-color:#fff3cd; color:#856404; border-radius:10px; border:1px solid #ffeeba; margin-bottom:15px;">
+            ⚠️ <b>Aapka Order Pending Hai!</b><br>
+            Aapke {len(pending)} order(s) abhi approve hona baqi hain.
         </div>
         """, unsafe_allow_html=True)
 
     c1, c2 = st.columns(2)
     c1.metric("Total Orders", len(my_orders))
-    c2.metric("Total Spent", f"Rs. {my_orders['Bill'].sum()}")
+    c2.metric("Total Bill", f"Rs. {my_orders['Bill'].sum()}")
     st.dataframe(my_orders.tail(5), use_container_width=True)
 
 # ========================================================
@@ -244,43 +251,32 @@ elif menu == "📜 History":
     st.dataframe(u_ords[['Date', 'Invoice_ID', 'Product', 'Status']], use_container_width=True)
 
 # ========================================================
-# STEP 15: FEEDBACK (FIXED: Redirect Without Error)
+# STEP 15: FEEDBACK (FIXED REDIRECTION)
 # ========================================================
 elif menu == "💬 Feedback":
     st.subheader("🌟 Share Your Feedback")
     
-    # Feedback Form using 'with' to keep it clean
-    with st.form("feedback_form", clear_on_submit=True):
-        f_msg = st.text_area("Message", placeholder="Yahan apna feedback likhein...")
-        submit_btn = st.form_submit_button("Submit Feedback 📩", use_container_width=True)
-        
-        if submit_btn:
-            if f_msg.strip():
+    # Message box (Form ke baghair takay hum value control kar sakein)
+    f_msg = st.text_area("Write message", placeholder="Type here...", height=150, key="f_input")
+    
+    if st.button("Submit Feedback 📩", use_container_width=True):
+        if f_msg.strip():
+            with st.spinner("Saving..."):
                 payload = {
                     "action": "feedback", "name": u_name, "phone": raw_ph, 
                     "message": f_msg, "date": datetime.now().strftime('%Y-%m-%d %H:%M')
                 }
+                requests.post(SCRIPT_URL, json=payload)
                 
-                try:
-                    requests.post(SCRIPT_URL, json=payload)
-                    st.success("✅ Feedback saved successfully!")
-                    st.balloons()
-                    
-                    # ERROR FIX: Hum menu_choice ko modify nahi karenge.
-                    # Hum user ko button dikhayenge wapis janay ke liye ya automatic redirection
-                    # ka wait karenge. 
-                    st.info("Redirecting to Dashboard in 2 seconds...")
-                    time.sleep(2)
-                    
-                    # Sab se safe tareeqa: Session update ke bajaye Dashboard par 'Force' janay ka:
-                    st.query_params["page"] = "dashboard" # Ye page refresh handle karega
-                    st.rerun()
-                    
-                except Exception as e:
-                    st.error(f"Error: {e}")
-            else:
-                st.warning("⚠️ Message khali nahi chor sakte.")
+                st.balloons()
+                st.success("✅ Saved! Redirecting to Dashboard...")
                 
+                # FINAL FIX: Direct menu change ki bajaye hum flag set kar rahe hain
+                time.sleep(1.5)
+                st.session_state.go_to_dashboard = True
+                st.rerun()
+        else:
+            st.warning("⚠️ Please type something.")
 
 # ========================================================
 # STEP 16: UPDATED ADMIN PANEL & DASHBOARD
