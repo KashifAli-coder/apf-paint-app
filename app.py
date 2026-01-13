@@ -36,7 +36,7 @@ def normalize_ph(n):
     return s
 
 # ========================================================
-# STEP 3-5: NAVIGATION & SESSION (Module 3)
+# STEP 3: SESSION STATE & NAVIGATION LOGIC
 # ========================================================
 if 'logged_in' not in st.session_state:
     st.session_state.update({'logged_in': False, 'user_data': {}, 'cart': [], 'menu_choice': "🏠 Dashboard"})
@@ -45,32 +45,65 @@ def set_nav(target):
     st.session_state.menu_choice = target
     st.rerun()
 
-# --- Login Check ---
+# ========================================================
+# STEP 4: LOGIN & REGISTER
+# ========================================================
 if not st.session_state.logged_in:
-    # (Step 4: Login/Register Logic)
-    l_ph = st.text_input("Phone")
-    l_pw = st.text_input("Password", type="password")
-    if st.button("Login"):
-        u_ph = normalize_ph(l_ph)
-        match = users_df[(users_df['Phone'].apply(normalize_ph) == u_ph) & (users_df['Password'].astype(str) == l_pw)]
-        if not match.empty:
-            st.session_state.logged_in = True
-            st.session_state.user_data = match.iloc[0].to_dict()
-            st.rerun()
+    t1, t2 = st.tabs(["🔐 Login", "📝 Register"])
+    with t1:
+        l_ph = st.text_input("Phone")
+        l_pw = st.text_input("Password", type="password")
+        if st.button("Login 🚀"):
+            u_ph = normalize_ph(l_ph)
+            match = users_df[(users_df['Phone'].apply(normalize_ph) == u_ph) & (users_df['Password'].astype(str) == l_pw)]
+            if not match.empty:
+                user_row = match.iloc[0]
+                if str(user_row['Role']).lower() == 'pending': st.warning("Awaiting Approval")
+                else:
+                    st.session_state.logged_in = True
+                    st.session_state.user_data = user_row.to_dict()
+                    st.rerun()
+            else: st.error("Login Failed")
+    with t2:
+        r_name = st.text_input("Name")
+        r_ph = st.text_input("Phone Number")
+        r_pw = st.text_input("Password", type="password")
+        if st.button("Register ✨"):
+            requests.post(SCRIPT_URL, json={"action":"register", "name":r_name, "phone":normalize_ph(r_ph), "password":r_pw})
+            st.success("Registered! Wait for admin.")
     st.stop()
 
-# --- Sidebar Buttons (HTML Logic) ---
-st.sidebar.title("Navigation")
+# ========================================================
+# STEP 5: SIDEBAR (NO RADIO LOCK)
+# ========================================================
+u_data = st.session_state.user_data
+u_name = u_data.get('Name', 'User')
+raw_ph = normalize_ph(u_data.get('Phone', ''))
+u_photo = u_data.get('Photo', '')
+
+sidebar_img = u_photo if (u_photo and str(u_photo) != 'nan') else "https://cdn-icons-png.flaticon.com/512/149/149071.png"
+st.sidebar.markdown(f'<img src="{sidebar_img}" class="profile-img">', unsafe_allow_html=True)
+st.sidebar.markdown(f"<h3 style='text-align:center;'>{u_name}</h3>", unsafe_allow_html=True)
+
 if st.sidebar.button("🏠 Dashboard"): set_nav("🏠 Dashboard")
+if st.sidebar.button("👤 Profile"): set_nav("👤 Profile")
 if st.sidebar.button("🛍️ New Order"): set_nav("🛍️ New Order")
 if st.sidebar.button("📜 History"): set_nav("📜 History")
 if st.sidebar.button("💬 Feedback"): set_nav("💬 Feedback")
-if normalize_ph(st.session_state.user_data['Phone']) == normalize_ph(JAZZCASH_NO):
+if raw_ph == normalize_ph(JAZZCASH_NO):
     if st.sidebar.button("🔐 Admin"): set_nav("🔐 Admin")
+if st.sidebar.button("Logout 🚪"): st.session_state.clear(); st.rerun()
 
 menu = st.session_state.menu_choice
-u_name = st.session_state.user_data['Name']
-raw_ph = normalize_ph(st.session_state.user_data['Phone'])
+
+# ========================================================
+# STEP 6: DASHBOARD
+# ========================================================
+if menu == "🏠 Dashboard":
+    st.header("🏠 Dashboard")
+    u_ords = orders_df[orders_df['Phone'].apply(normalize_ph) == raw_ph]
+    st.metric("Total Bill Paid", f"Rs. {u_ords['Bill'].sum()}")
+    st.dataframe(u_ords.tail(5), use_container_width=True)
 
 # ========================================================
 # STEP 7: PRODUCT SELECTION (Module 7)
