@@ -7,6 +7,15 @@ from reportlab.pdfgen import canvas
 import base64
 import time
 
+import streamlit as st
+import pandas as pd
+import requests
+from datetime import datetime
+from io import BytesIO
+from reportlab.pdfgen import canvas
+import base64
+import time
+
 # ========================================================
 # STEP 1: CONFIGURATION & LINKS
 # ========================================================
@@ -44,7 +53,7 @@ users_df, settings_df, orders_df, feedback_df = load_all_data()
 # STEP 3: SESSION STATE & HELPERS
 # ========================================================
 if 'logged_in' not in st.session_state:
-    st.session_state.update({'logged_in': False, 'user_data': {}, 'cart': [], 'is_admin': False})
+    st.session_state.update({'logged_in': False, 'user_data': {}, 'cart': [], 'is_admin': False, 'menu_choice': "🏠 Dashboard"})
 
 def normalize_ph(n):
     s = str(n).strip().split('.')[0]
@@ -61,7 +70,6 @@ if not st.session_state.logged_in:
         pw_l = st.text_input("Password", type="password", key="l_pw")
         if st.button("Login 🚀"):
             u_ph = normalize_ph(ph_l)
-            # Admin login fix: Dono numbers ko normalize kiya
             match = users_df[(users_df['Phone'].apply(normalize_ph) == u_ph) & (users_df['Password'].astype(str) == pw_l)]
             if not match.empty:
                 user_row = match.iloc[0]
@@ -92,16 +100,39 @@ else:
     st.sidebar.markdown(f'<div style="text-align:center"><img src="{sidebar_img}" class="profile-img"></div>', unsafe_allow_html=True)
     st.sidebar.markdown(f"<h3 style='text-align: center;'>👤 {u_name}</h3>", unsafe_allow_html=True)
     
-    nav = ["👤 Profile", "🛍️ New Order", "📜 History", "💬 Feedback"]
+    # Dashboard option added to nav
+    nav = ["🏠 Dashboard", "👤 Profile", "🛍️ New Order", "📜 History", "💬 Feedback"]
     if st.session_state.is_admin: nav.append("🔐 Admin")
-    menu = st.sidebar.radio("Navigation", nav)
+    
+    # Menu value handled by session state
+    menu = st.sidebar.radio("Navigation", nav, key="menu_choice")
+    
     if st.sidebar.button("Logout 🚪"):
         st.session_state.clear(); st.rerun()
 
 # ========================================================
+# DASHBOARD MODULE (NEW)
+# ========================================================
+if menu == "🏠 Dashboard":
+    st.header(f"Dashboard - Welcome {u_name}")
+    
+    # Filtering user's own data
+    my_orders = orders_df[orders_df['Phone'].apply(normalize_ph) == raw_ph]
+    
+    col1, col2, col3 = st.columns(3)
+    col1.metric("My Total Orders", len(my_orders))
+    col2.metric("Total Spent", f"Rs. {my_orders['Bill'].sum()}")
+    
+    st.subheader("Recent Updates")
+    if my_orders.empty:
+        st.info("No orders found. Go to 'New Order' to start shopping!")
+    else:
+        st.table(my_orders.tail(3)[['Date', 'Invoice_ID', 'Status']])
+
+# ========================================================
 # STEP 6: PROFILE
 # ========================================================
-if menu == "👤 Profile":
+elif menu == "👤 Profile":
     st.header(f"👋 Hi, {u_name}")
     p_img = u_photo if (u_photo and str(u_photo) != 'nan') else "https://cdn-icons-png.flaticon.com/512/149/149071.png"
     st.markdown(f'<img src="{p_img}" class="profile-img">', unsafe_allow_html=True)
@@ -126,21 +157,14 @@ if menu == "👤 Profile":
 # ========================================================
 elif menu == "🛍️ New Order":
     st.header("🛒 Create New Order")
-    
     scat = st.selectbox("Category", settings_df['Category'].unique())
     sub_df = settings_df[settings_df['Category'] == scat]
     sprod = st.selectbox("Product", sub_df['Product Name'])
-    
     prc = float(sub_df[sub_df['Product Name'] == sprod]['Price'].values[0])
     qty = st.number_input("Quantity", min_value=1, value=1)
     
     if st.button("Add to Cart ➕", use_container_width=True):
-        st.session_state.cart.append({
-            "Product": sprod, 
-            "Qty": qty, 
-            "Price": prc, 
-            "Total": prc * qty
-        })
+        st.session_state.cart.append({"Product": sprod, "Qty": qty, "Price": prc, "Total": prc * qty})
         st.toast(f"{sprod} added to cart!")
         st.rerun()
 
@@ -149,14 +173,12 @@ elif menu == "🛍️ New Order":
 # ========================================================
     if st.session_state.cart:
         st.markdown("### 📋 Review Your Cart")
-        
         for i, itm in enumerate(st.session_state.cart):
             col_p, col_q, col_x = st.columns([4, 2, 1])
             col_p.write(f"**{itm['Product']}**")
             col_q.write(f"Rs {int(itm['Total'])} ({itm['Qty']})")
             if col_x.button("❌", key=f"del_cart_{i}"):
-                st.session_state.cart.pop(i)
-                st.rerun()
+                st.session_state.cart.pop(i); st.rerun()
         st.divider()
 
 # ========================================================
@@ -164,7 +186,6 @@ elif menu == "🛍️ New Order":
 # ========================================================
         total_bill = sum(x['Total'] for x in st.session_state.cart)
         st.info(f"#### **Grand Total: Rs. {total_bill}**")
-        
         pay_method = st.radio("Select Payment Method", ["COD", "JazzCash", "EasyPaisa"])
 
 # ========================================================
@@ -195,23 +216,17 @@ elif menu == "🛍️ New Order":
         if st.button("Confirm Order ✅", use_container_width=True):
             invoice_id = f"APF-{int(time.time())}"
             all_products = ", ".join([f"{x['Qty']}x {x['Product']}" for x in st.session_state.cart])
-            
-            order_payload = {
-                "action": "order", 
-                "invoice_id": invoice_id,
-                "name": u_name, 
-                "phone": raw_ph, 
-                "product": all_products, 
-                "bill": float(total_bill), 
-                "payment_method": pay_method
-            }
+            order_payload = {"action": "order", "invoice_id": invoice_id, "name": u_name, "phone": raw_ph, "product": all_products, "bill": float(total_bill), "payment_method": pay_method}
             requests.post(SCRIPT_URL, json=order_payload)
             
             pdf_data = create_pdf_invoice(invoice_id, u_name, all_products, total_bill)
             st.download_button("📥 Download Receipt", pdf_data, file_name=f"{invoice_id}.pdf")
             
-            st.session_state.cart = [] 
-            st.success("Order Placed Successfully!")
+            st.session_state.cart = []
+            st.success("Order Placed! Redirecting...")
+            time.sleep(2)
+            st.session_state.menu_choice = "🏠 Dashboard" # Redirect to Dashboard
+            st.rerun()
 
 # ========================================================
 # STEP 13: ORDER - WHATSAPP NOTIFICATION
@@ -226,59 +241,28 @@ elif menu == "🛍️ New Order":
 elif menu == "📜 History":
     st.header("Your Order History")
     user_orders = orders_df[orders_df['Phone'].apply(normalize_ph) == raw_ph]
-    
-    if user_orders.empty:
-        st.info("No orders found.")
-    else:
-        st.dataframe(user_orders[['Date', 'Invoice_ID', 'Product', 'Bill', 'Status']], use_container_width=True)
+    if user_orders.empty: st.info("No orders found.")
+    else: st.dataframe(user_orders[['Date', 'Invoice_ID', 'Product', 'Bill', 'Status']], use_container_width=True)
 
 # ========================================================
-# STEP 15: FANCY FEEDBACK SYSTEM (Auto-Reset Fix)
+# STEP 15: FANCY FEEDBACK SYSTEM (Dashboard Redirect Fix)
 # ========================================================
 elif menu == "💬 Feedback":
     st.subheader("🌟 Share Your Experience")
-    
-    st.markdown(f"""
-    <div style="background: white; padding: 25px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); border: 1px solid #f1f5f9; margin-bottom: 20px;">
-        <div style="color: #64748b; font-size: 0.9em; margin-bottom: 5px;">Customer Name</div>
-        <div style="color: #1e293b; font-weight: 600; font-size: 1.1em; margin-bottom: 15px;">👤 {u_name}</div>
-        <div style="color: #64748b; font-size: 0.9em; margin-bottom: 5px;">Phone Number</div>
-        <div style="color: #1e293b; font-weight: 600; font-size: 1.1em; margin-bottom: 15px;">📞 {raw_ph}</div>
-        <div style="color: #64748b; font-size: 0.9em; margin-bottom: 5px;">Current Date</div>
-        <div style="color: #1e293b; font-weight: 600; font-size: 1.1em;">📅 {datetime.now().strftime('%d %b, %Y')}</div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown("##### ✍️ Write your message")
-    # key='f_input' hi session state handle karega
-    f_msg = st.text_area(
-        "feedback_box", 
-        placeholder="Type your experience or suggestions here...", 
-        height=150, 
-        label_visibility="collapsed",
-        key="f_input" 
-    )
+    f_msg = st.text_area("Write message", placeholder="Type here...", height=150, key="f_input")
     
     if st.button("Submit Feedback 📩", use_container_width=True):
         if st.session_state.f_input.strip():
-            with st.spinner("Saving your feedback..."):
-                payload = {
-                    "action":"feedback", 
-                    "name":u_name, 
-                    "phone":raw_ph, 
-                    "message":st.session_state.f_input,
-                    "date": datetime.now().strftime('%Y-%m-%d %H:%M')
-                }
+            with st.spinner("Saving..."):
+                payload = {"action":"feedback", "name":u_name, "phone":raw_ph, "message":st.session_state.f_input, "date": datetime.now().strftime('%Y-%m-%d %H:%M')}
                 requests.post(SCRIPT_URL, json=payload)
                 st.balloons()
-                st.success("✅ Thank you! Your feedback has been saved.")
-                
-                time.sleep(1.5)
-                # Correction: Yahan box clear ho raha hai
+                st.success("✅ Thank you! Redirecting to Dashboard...")
+                time.sleep(2)
                 st.session_state.f_input = "" 
+                st.session_state.menu_choice = "🏠 Dashboard" # Yahan Dashboard par wapsi ho rahi hai
                 st.rerun()
-        else:
-            st.warning("⚠️ Please type a message before submitting.")
+        else: st.warning("Please type something.")
 
 # ========================================================
 # STEP 16: UPDATED ADMIN PANEL & DASHBOARD
