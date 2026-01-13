@@ -182,65 +182,50 @@ elif menu == "🛍️ New Order":
 # STEP 9: ORDER - TOTAL BILL CALCULATION
 # ========================================================
         total_bill = sum(x['Total'] for x in st.session_state.cart)
-        st.info(f"#### 💰 Total Bill: Rs. {total_bill}")
+        st.info(f"#### **Total Bill: Rs. {total_bill}**")
 
 # ========================================================
-# STEP 10: ORDER - PAYMENT METHOD & QR CODE
+# STEP 10: ORDER - PAYMENT & QR
 # ========================================================
-        pay_method = st.radio("Chose Payment Method", ["COD", "JazzCash", "EasyPaisa"])
+        pay_method = st.radio("Payment Method", ["COD", "JazzCash", "EasyPaisa"])
         if pay_method != "COD":
-            acc_no = JAZZCASH_NO if pay_method == "JazzCash" else EASYPAISA_NO
-            st.warning(f"Please pay to {pay_method}: {acc_no}")
-            qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=Pay-{total_bill}-to-{acc_no}"
-            st.image(qr_url, width=150)
+            acc = JAZZCASH_NO if pay_method == "JazzCash" else EASYPAISA_NO
+            st.warning(f"Pay to {pay_method}: {acc}")
+            qr = f"https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=Pay-{total_bill}"
+            st.image(qr, width=150)
 
 # ========================================================
-# STEP 11: ORDER - INVOICE PDF GENERATOR FUNCTION
+# STEP 11: ORDER - INVOICE GENERATOR
 # ========================================================
-        def create_pdf_invoice(inv_id, name, items_list, total):
-            buffer = BytesIO()
-            p = canvas.Canvas(buffer)
-            p.drawString(100, 800, f"Invoice ID: {inv_id}")
-            p.drawString(100, 780, f"Customer: {name}")
-            p.drawString(100, 760, f"Total Bill: Rs. {total}")
+        def create_pdf(inv_id, name, items, total):
+            buf = BytesIO()
+            p = canvas.Canvas(buf)
+            p.drawString(100, 800, f"Invoice: {inv_id}")
+            p.drawString(100, 780, f"Name: {name}")
+            p.drawString(100, 760, f"Total: {total}")
             p.save()
-            return buffer.getvalue()
+            return buf.getvalue()
 
 # ========================================================
-# STEP 12: ORDER - CONFIRMATION & SHEET UPDATE
+# STEP 12: ORDER - CONFIRMATION
 # ========================================================
-        if st.button("Confirm Order ✅", use_container_width=True):
-            invoice_id = f"APF-{int(time.time())}"
-            all_products = ", ".join([f"{x['Qty']}x {x['Product']}" for x in st.session_state.cart])
+        if st.button("Confirm Order ✅"):
+            inv_id = f"APF-{int(time.time())}"
+            prods = ", ".join([f"{x['Qty']}x {x['Product']}" for x in st.session_state.cart])
+            requests.post(SCRIPT_URL, json={"action":"order", "invoice_id":inv_id, "name":u_name, "phone":raw_ph, "product":prods, "bill":float(total_bill), "payment_method":pay_method})
             
-            # Google Sheet mein data bhejna
-            order_payload = {
-                "action": "order", 
-                "invoice_id": invoice_id, 
-                "name": u_name, 
-                "phone": raw_ph, 
-                "product": all_products, 
-                "bill": float(total_bill), 
-                "payment_method": pay_method
-            }
-            requests.post(SCRIPT_URL, json=order_payload)
-            
-            # Cart khali karna aur Dashboard par janay ki tayari
             st.session_state.cart = []
-            st.success("Order Placed Successfully! Redirecting...")
-            
-            # Ye raha redirection ka sahi tareeqa jo error khatam kar dega
-            st.session_state.menu_choice = "🏠 Dashboard"
+            st.success("Order Placed!")
             time.sleep(1)
+            # Safe Redirection without modifying key directly
+            st.query_params["nav"] = "dashboard" 
             st.rerun()
 
 # ========================================================
-# STEP 13: ORDER - WHATSAPP NOTIFICATION (Redirect Fix)
+# STEP 13: ORDER - WHATSAPP LINK
 # ========================================================
-        # Ye step sirf tab dikhayi dega agar cart khali na ho aur confirm se pehle ho
-        whatsapp_msg = f"*New Order ID:* {u_name}\n*Total:* Rs.{total_bill}"
-        wa_link = f"https://wa.me/923005508112?text={requests.utils.quote(whatsapp_msg)}"
-        st.markdown(f'<a href="{wa_link}" target="_blank">📲 Open WhatsApp for Support</a>', unsafe_allow_html=True)
+            wa_text = f"New Order: {inv_id}\nTotal: {total_bill}"
+            st.markdown(f"[WhatsApp Confirmation](https://wa.me/923005508112?text={wa_text})")
 
 # ========================================================
 # STEP 14: HISTORY
@@ -251,32 +236,36 @@ elif menu == "📜 History":
     st.dataframe(u_ords[['Date', 'Invoice_ID', 'Product', 'Status']], use_container_width=True)
 
 # ========================================================
-# STEP 15: FEEDBACK (FIXED REDIRECTION)
+# STEP 15: FEEDBACK (FIXED: NO ERROR & REDIRECTS)
 # ========================================================
 elif menu == "💬 Feedback":
     st.subheader("🌟 Share Your Feedback")
     
-    # Message box (Form ke baghair takay hum value control kar sakein)
-    f_msg = st.text_area("Write message", placeholder="Type here...", height=150, key="f_input")
+    # Message box - Simple variable use to avoid key modification error
+    f_msg = st.text_area("Message", placeholder="Yahan likhein...", height=150)
     
-    if st.button("Submit Feedback 📩", use_container_width=True):
+    if st.button("Submit Feedback 📩"):
         if f_msg.strip():
             with st.spinner("Saving..."):
                 payload = {
-                    "action": "feedback", "name": u_name, "phone": raw_ph, 
-                    "message": f_msg, "date": datetime.now().strftime('%Y-%m-%d %H:%M')
+                    "action": "feedback", 
+                    "name": u_name, 
+                    "phone": raw_ph, 
+                    "message": f_msg,
+                    "date": datetime.now().strftime('%Y-%m-%d %H:%M')
                 }
                 requests.post(SCRIPT_URL, json=payload)
                 
                 st.balloons()
                 st.success("✅ Saved! Redirecting to Dashboard...")
-                
-                # FINAL FIX: Direct menu change ki bajaye hum flag set kar rahe hain
                 time.sleep(1.5)
-                st.session_state.go_to_dashboard = True
+                
+                # FIXED REDIRECTION: 
+                # Hum key ko modify nahi kar rahe, sirf refresh kar rahe hain
+                # Default behavior app ko dashboard par hi le jayega
                 st.rerun()
         else:
-            st.warning("⚠️ Please type something.")
+            st.warning("Please type a message.")
 
 # ========================================================
 # STEP 16: UPDATED ADMIN PANEL & DASHBOARD
