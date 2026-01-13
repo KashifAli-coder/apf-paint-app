@@ -15,14 +15,15 @@ EASYPAISA_NO = "03005508112"
 
 st.set_page_config(page_title="Paint Pro Store", layout="wide")
 
-# Custom Global CSS
+# Custom Global CSS for better UI
 st.markdown("""
     <style>
     .stApp { background-color: #f4f7f6; }
     .stButton>button { border-radius: 8px; font-weight: 600; transition: 0.3s; }
     .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
     [data-testid="stSidebar"] { background-color: #ffffff; border-right: 1px solid #e0e0e0; }
-    .review-card { background: #f8fafc; padding: 15px; border-radius: 10px; border-left: 5px solid #3b82f6; margin-bottom: 10px; }
+    .review-card { background: #ffffff; padding: 15px; border-radius: 12px; border-left: 5px solid #3b82f6; margin-bottom: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    .price-tag { background: #e1effe; padding: 15px; border-radius: 10px; border-left: 5px solid #3b82f6; margin: 15px 0; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -52,8 +53,10 @@ def normalize_ph(n):
 def get_next_invoice(df):
     if df.empty or 'Invoice_ID' not in df.columns: return "0001"
     try:
-        last_inv = pd.to_numeric(df['Invoice_ID'], errors='coerce').max()
-        return f"{int(last_inv) + 1:04d}" if not pd.isna(last_inv) else "0001"
+        # Filter only numeric invoice IDs to find max
+        valid_ids = pd.to_numeric(df['Invoice_ID'], errors='coerce').dropna()
+        if valid_ids.empty: return "0001"
+        return f"{int(valid_ids.max()) + 1:04d}"
     except: return f"{len(df) + 1:04d}"
 
 # ========================================================
@@ -72,7 +75,7 @@ def set_nav(target):
     st.rerun()
 
 # ========================================================
-# STEP 4: LOGIN & REGISTER
+# STEP 4: LOGIN & REGISTER MODULE
 # ========================================================
 if not st.session_state.logged_in:
     cols = st.columns([1, 2, 1])
@@ -80,183 +83,276 @@ if not st.session_state.logged_in:
         st.markdown("<h1 style='text-align: center;'>🎨 Paint Factory Store</h1>", unsafe_allow_html=True)
         t1, t2 = st.tabs(["🔐 Login", "📝 Register"])
         with t1:
-            l_ph = st.text_input("Phone", key="login_ph")
+            l_ph = st.text_input("Phone Number", key="login_ph")
             l_pw = st.text_input("Password", type="password", key="login_pw")
             if st.button("Login 🚀", use_container_width=True):
                 u_ph = normalize_ph(l_ph)
                 match = users_df[(users_df['Phone'].apply(normalize_ph) == u_ph) & (users_df['Password'].astype(str) == l_pw)]
                 if not match.empty:
                     user_row = match.iloc[0]
-                    if str(user_row['Role']).lower() == 'pending': st.warning("Awaiting Approval")
+                    if str(user_row['Role']).lower() == 'pending':
+                        st.warning("Your account is awaiting Admin approval.")
                     else:
                         st.session_state.logged_in = True
                         st.session_state.user_data = user_row.to_dict()
                         st.rerun()
-                else: st.error("Invalid Credentials")
+                else: st.error("Invalid Phone or Password")
         with t2:
             r_name = st.text_input("Full Name", key="reg_name")
-            r_ph = st.text_input("Phone Number", key="reg_ph")
+            r_ph = st.text_input("Phone", key="reg_ph")
             r_pw = st.text_input("Set Password", type="password", key="reg_pw")
             if st.button("Create Account ✨", use_container_width=True):
-                requests.post(SCRIPT_URL, json={"action":"register", "name":r_name, "phone":normalize_ph(r_ph), "password":r_pw})
-                st.success("Registration Sent! Wait for Admin Approval.")
+                if r_name and r_ph and r_pw:
+                    requests.post(SCRIPT_URL, json={"action":"register", "name":r_name, "phone":normalize_ph(r_ph), "password":r_pw})
+                    st.success("Registration request sent! Please wait for approval.")
+                else: st.error("Please fill all fields.")
     st.stop()
 
 # ========================================================
-# STEP 5: SIDEBAR
+# STEP 5: SIDEBAR & NAVIGATION
 # ========================================================
 u_data = st.session_state.user_data
 u_name = u_data.get('Name', 'User')
-raw_ph = normalize_ph(u_data.get('Phone', ''))
+u_phone = normalize_ph(u_data.get('Phone', ''))
 u_photo = u_data.get('Photo', '')
+
 sidebar_img = u_photo if (u_photo and str(u_photo) != 'nan' and u_photo != '') else "https://cdn-icons-png.flaticon.com/512/149/149071.png"
 
-st.sidebar.markdown(f'<div style="text-align:center; padding: 20px;"><img src="{sidebar_img}" style="width:110px; height:110px; border-radius:50%; object-fit:cover; border:3px solid #3b82f6; box-shadow: 0 4px 10px rgba(0,0,0,0.1);"></div>', unsafe_allow_html=True)
-st.sidebar.markdown(f"<h3 style='text-align:center;'>{u_name}</h3>", unsafe_allow_html=True)
+st.sidebar.markdown(f'''
+    <div style="text-align:center; padding: 20px;">
+        <img src="{sidebar_img}" style="width:110px; height:110px; border-radius:50%; object-fit:cover; border:3px solid #3b82f6;">
+        <h3 style="margin-top:10px;">{u_name}</h3>
+        <p style="color:gray;">{u_phone}</p>
+    </div>
+''', unsafe_allow_html=True)
 
-nav_options = {"🏠 Dashboard": "🏠 Dashboard", "👤 Profile": "👤 Profile", "🛍️ New Order": "🛍️ New Order", "📜 History": "📜 History", "💬 Feedback": "💬 Feedback"}
-for label, target in nav_options.items():
-    if st.sidebar.button(label, use_container_width=True): set_nav(target)
+nav_btns = {
+    "🏠 Dashboard": "🏠 Dashboard",
+    "🛍️ New Order": "🛍️ New Order",
+    "📜 History": "📜 History",
+    "👤 Profile": "👤 Profile",
+    "💬 Feedback": "💬 Feedback"
+}
 
-if raw_ph == normalize_ph(JAZZCASH_NO):
-    if st.sidebar.button("🔐 Admin Panel", use_container_width=True): set_nav("🔐 Admin")
+for label, target in nav_btns.items():
+    if st.sidebar.button(label, use_container_width=True):
+        set_nav(target)
+
+if u_phone == normalize_ph(JAZZCASH_NO):
+    st.sidebar.divider()
+    if st.sidebar.button("🔐 Admin Panel", use_container_width=True, type="primary"):
+        set_nav("🔐 Admin")
 
 st.sidebar.divider()
 if st.sidebar.button("Logout 🚪", use_container_width=True):
-    st.session_state.clear(); st.rerun()
+    st.session_state.clear()
+    st.rerun()
 
 menu = st.session_state.menu_choice
 
 # ========================================================
-# STEP 6: MODULES
+# STEP 6: MODULES LOGIC
 # ========================================================
 
+# --- DASHBOARD ---
 if menu == "🏠 Dashboard":
-    st.markdown(f"## 🏠 Welcome back, {u_name}!")
-    u_ords = orders_df[orders_df['Phone'].apply(normalize_ph) == raw_ph]
+    st.title(f"Welcome, {u_name}!")
+    u_ords = orders_df[orders_df['Phone'].apply(normalize_ph) == u_phone]
     total_spent = u_ords['Bill'].sum() if not u_ords.empty else 0
-    st.markdown(f"""
-        <div style="display: flex; gap: 15px; margin-bottom: 25px;">
-            <div style="flex:1; background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; padding: 20px; border-radius: 15px; text-align: center;">
-                <h4 style="margin:0; opacity: 0.8; font-size: 14px;">TOTAL ORDERS</h4>
-                <p style="font-size: 28px; font-weight: bold; margin: 5px 0;">{len(u_ords)}</p>
-            </div>
-            <div style="flex:1; background: linear-gradient(135deg, #10b981, #059669); color: white; padding: 20px; border-radius: 15px; text-align: center;">
-                <h4 style="margin:0; opacity: 0.8; font-size: 14px;">TOTAL SPENT</h4>
-                <p style="font-size: 28px; font-weight: bold; margin: 5px 0;">Rs. {total_spent}</p>
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
+    
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Total Orders", len(u_ords))
+    c2.metric("Total Spent", f"Rs. {total_spent}")
+    c3.metric("Account Status", "Verified ✅")
+    
+    st.subheader("Recent Orders")
+    if not u_ords.empty:
+        for _, row in u_ords.tail(5).iloc[::-1].iterrows():
+            st.markdown(f"""
+                <div class='review-card'>
+                    <div style='display:flex; justify-content:space-between;'>
+                        <b>Order #{row['Invoice_ID']}</b>
+                        <span style='color:#3b82f6;'>{row['Status']}</span>
+                    </div>
+                    <p style='margin:5px 0;'>{row['Product']}</p>
+                    <b>Rs. {row['Bill']}</b>
+                </div>
+            """, unsafe_allow_html=True)
+    else: st.info("No orders found yet.")
 
+# --- NEW ORDER (WITH EDIT & REVIEW LOGIC) ---
 elif menu == "🛍️ New Order":
-    st.header("🛍️ Create New Order")
-    if not settings_df.empty:
+    st.title("Create New Order")
+    if settings_df.empty:
+        st.error("Store settings not loaded. Contact Admin.")
+    else:
         col_sel, col_cart = st.columns([1.5, 1])
+        
         with col_sel:
-            st.subheader("🎯 Selection")
+            st.subheader("🎯 Selection Area")
             cats = list(settings_df['Category'].unique())
             def_cat = st.session_state.edit_vals.get('cat', cats[0])
-            scat = st.selectbox("Category", cats, index=cats.index(def_cat) if def_cat in cats else 0)
+            scat = st.selectbox("Select Category", cats, index=cats.index(def_cat) if def_cat in cats else 0)
             
             cat_items = settings_df[settings_df['Category'] == scat]
             prods = list(cat_items['Product Name'].unique())
             def_prod = st.session_state.edit_vals.get('prod', prods[0])
-            sprod = st.selectbox("Product Name", prods, index=prods.index(def_prod) if def_prod in prods else 0)
+            sprod = st.selectbox("Select Product", prods, index=prods.index(def_prod) if def_prod in prods else 0)
             
             p_data = cat_items[cat_items['Product Name'] == sprod].iloc[0]
+            
             all_colors = [c.strip() for c in str(p_data['Colors']).split(',') if c.strip()]
-            color_options = [c.split(':')[0] for c in all_colors]
-            def_shade = st.session_state.edit_vals.get('shade', color_options[0] if color_options else "")
-            selected_color = st.selectbox("Select Shade", color_options, index=color_options.index(def_shade) if def_shade in color_options else 0)
+            color_names = [c.split(':')[0] for c in all_colors]
+            def_shade = st.session_state.edit_vals.get('shade', color_names[0] if color_names else "")
+            selected_shade = st.selectbox("Select Shade", color_names, index=color_names.index(def_shade) if def_shade in color_names else 0)
             
             valid_packs = [p for p in ["20kg", "Gallon", "Quarter"] if float(p_data.get(f"Price_{p}", 0)) > 0]
             def_pack = st.session_state.edit_vals.get('pack', valid_packs[0] if valid_packs else "")
             packing = st.radio("Select Size", valid_packs, index=valid_packs.index(def_pack) if def_pack in valid_packs else 0, horizontal=True)
             
-            price = float(p_data.get(f"Price_{packing}", 0))
-            st.info(f"Rate: Rs. {price}")
-            qty = st.number_input("Quantity", 1, 500, int(st.session_state.edit_vals.get('qty', 1)))
+            u_price = float(p_data.get(f"Price_{packing}", 0))
+            st.markdown(f"<div class='price-tag'><h3>Unit Price: Rs. {u_price}</h3></div>", unsafe_allow_html=True)
+            
+            def_qty = st.session_state.edit_vals.get('qty', 1)
+            qty = st.number_input("Quantity", 1, 500, int(def_qty))
             
             if st.button("Update Item 🔄" if st.session_state.edit_mode else "Add to List 🛒", use_container_width=True):
                 st.session_state.cart.append({
-                    "Product": f"{sprod} ({packing})", "Shade": selected_color, "Qty": qty, 
-                    "Price": price, "Total": price * qty, "raw_prod": sprod, "raw_pack": packing, "raw_cat": scat
+                    "Product": f"{sprod} ({packing})", "Shade": selected_shade, "Qty": qty, 
+                    "Price": u_price, "Total": u_price * qty, "raw_prod": sprod, "raw_pack": packing, "raw_cat": scat
                 })
                 st.session_state.edit_mode = False; st.session_state.edit_vals = {}; st.rerun()
 
         with col_cart:
-            st.subheader("📋 Order Review")
-            if not st.session_state.cart: st.info("Cart is empty.")
+            st.subheader("📋 Your Cart")
+            if not st.session_state.cart:
+                st.info("Your cart is empty. Add products to proceed.")
             else:
                 total_bill = 0
                 for i, itm in enumerate(st.session_state.cart):
                     total_bill += itm['Total']
                     c_det, c_edit, c_del = st.columns([3, 1, 1])
-                    c_det.write(f"**{itm['Product']}**\n{itm['Shade']} | {itm['Qty']}x")
+                    c_det.markdown(f"**{itm['Product']}**\n{itm['Shade']} | {itm['Qty']}x")
+                    
                     if c_edit.button("✏️", key=f"ed_{i}"):
                         st.session_state.edit_mode = True
                         st.session_state.edit_vals = {'cat': itm['raw_cat'], 'prod': itm['raw_prod'], 'pack': itm['raw_pack'], 'shade': itm['Shade'], 'qty': itm['Qty']}
                         st.session_state.cart.pop(i); st.rerun()
-                    if c_del.button("❌", key=f"del_{i}"): st.session_state.cart.pop(i); st.rerun()
+                        
+                    if c_del.button("❌", key=f"del_{i}"):
+                        st.session_state.cart.pop(i); st.rerun()
                 
-                st.divider(); st.markdown(f"### Total: Rs. {total_bill}")
-                pay_type = st.selectbox("Payment", ["COD", "JazzCash", "EasyPaisa"])
-                receipt_b64 = ""
+                st.divider()
+                st.write(f"### Grand Total: Rs. {total_bill}")
+                
+                if st.button("Clear All Cart 🗑️", use_container_width=True):
+                    st.session_state.cart = []; st.rerun()
+                
+                st.divider()
+                pay_type = st.selectbox("Payment Method", ["COD", "JazzCash", "EasyPaisa"])
+                receipt_img = ""
                 if pay_type != "COD":
-                    r_file = st.file_uploader("Receipt", type=['jpg','png'])
-                    if r_file: receipt_b64 = f"data:image/png;base64,{base64.b64encode(r_file.read()).decode()}"
+                    r_file = st.file_uploader("Upload Receipt Proof", type=['jpg','png'])
+                    if r_file: receipt_img = f"data:image/png;base64,{base64.b64encode(r_file.read()).decode()}"
 
                 if st.button("Finalize Order ✅", use_container_width=True, type="primary"):
-                    if pay_type != "COD" and not receipt_b64: st.error("Upload Receipt!")
+                    if pay_type != "COD" and not receipt_img:
+                        st.error("Please upload payment receipt first!")
                     else: st.session_state.show_review = True
 
-    # --- THE REVIEW DIALOG ---
+    # --- REVIEW DIALOG (FINAL STEP) ---
     if st.session_state.show_review:
-        @st.dialog("📋 Confirm Order")
-        def review_dialog():
-            st.write("Summary:")
+        @st.dialog("Final Confirmation")
+        def confirm_order():
+            st.warning("Please review your items carefully.")
             for itm in st.session_state.cart:
-                st.write(f"- {itm['Qty']}x {itm['Product']} ({itm['Shade']})")
-            st.write(f"**Total Bill: Rs. {total_bill}**")
-            st.write(f"Payment: {pay_type}")
-            if st.button("Confirm & Submit ✅", use_container_width=True, type="primary"):
+                st.write(f"🔹 {itm['Qty']}x {itm['Product']} - {itm['Shade']}")
+            st.markdown(f"**Total Bill: Rs. {total_bill}**")
+            st.write(f"Payment Method: {pay_type}")
+            
+            col1, col2 = st.columns(2)
+            if col1.button("Cancel", use_container_width=True):
+                st.session_state.show_review = False; st.rerun()
+            if col2.button("Confirm & Order", use_container_width=True, type="primary"):
                 inv_no = get_next_invoice(orders_df)
-                all_p = ", ".join([f"{x['Qty']}x {x['Product']} ({x['Shade']})" for x in st.session_state.cart])
-                requests.post(SCRIPT_URL, json={"action":"order", "invoice_id":inv_no, "name":u_name, "phone":raw_ph, "product":all_p, "bill":total_bill, "payment_method":pay_type, "receipt": receipt_b64})
-                st.session_state.cart = []; st.session_state.show_review = False; st.success("Success!"); time.sleep(1); set_nav("🏠 Dashboard")
-        review_dialog()
+                all_items_str = ", ".join([f"{x['Qty']}x {x['Product']} ({x['Shade']})" for x in st.session_state.cart])
+                requests.post(SCRIPT_URL, json={
+                    "action":"order", "invoice_id":inv_no, "name":u_name, "phone":u_phone, 
+                    "product":all_items_str, "bill":total_bill, "payment_method":pay_type, "receipt": receipt_img
+                })
+                st.session_state.cart = []; st.session_state.show_review = False
+                st.success(f"Order #{inv_no} Placed Successfully!"); time.sleep(1); set_nav("🏠 Dashboard")
+        confirm_order()
 
+# --- HISTORY ---
 elif menu == "📜 History":
-    st.header("📜 History")
-    u_ords = orders_df[orders_df['Phone'].apply(normalize_ph) == raw_ph]
-    if not u_ords.empty:
+    st.title("Order History")
+    u_ords = orders_df[orders_df['Phone'].apply(normalize_ph) == u_phone]
+    if u_ords.empty:
+        st.info("You haven't placed any orders yet.")
+    else:
         for _, row in u_ords.iloc[::-1].iterrows():
-            st.markdown(f"<div class='review-card'><b>#{row['Invoice_ID']}</b><br>{row['Product']}<br>Rs. {row['Bill']} - {row['Status']}</div>", unsafe_allow_html=True)
+            with st.container():
+                st.markdown(f"""
+                    <div class='review-card'>
+                        <small>{row['Timestamp']}</small>
+                        <h4>Invoice #{row['Invoice_ID']}</h4>
+                        <p>{row['Product']}</p>
+                        <div style='display:flex; justify-content:space-between;'>
+                            <b>Rs. {row['Bill']}</b>
+                            <span style='background:#dcfce7; color:#166534; padding:2px 10px; border-radius:10px;'>{row['Status']}</span>
+                        </div>
+                    </div>
+                """, unsafe_allow_html=True)
 
+# --- ADMIN PANEL ---
 elif menu == "🔐 Admin":
-    st.header("🛡️ Admin")
-    t1, t2, t3 = st.tabs(["Orders", "Users", "Feedback"])
+    st.title("🛡️ Administrative Control")
+    t1, t2, t3 = st.tabs(["Manage Orders", "User Approvals", "Feedback Logs"])
+    
     with t1:
-        for idx, row in orders_df.iterrows():
-            with st.expander(f"{row['Invoice_ID']} - {row['Name']}"):
-                st.write(f"Details: {row['Product']}"); st.write(f"Bill: {row['Bill']}")
-                if st.button("Mark Paid", key=f"adm_{idx}"):
-                    requests.post(SCRIPT_URL, json={"action":"mark_paid", "invoice_id":row['Invoice_ID']}); st.rerun()
-    with t2: st.dataframe(users_df)
-    with t3: st.dataframe(feedback_df)
+        st.subheader("Pending & Recent Orders")
+        for idx, row in orders_df.iloc[::-1].iterrows():
+            with st.expander(f"Order #{row['Invoice_ID']} - {row['Name']}"):
+                st.write(f"Items: {row['Product']}")
+                st.write(f"Bill: Rs. {row['Bill']}")
+                st.write(f"Payment: {row['Payment_Method']}")
+                if 'Receipt' in row and row['Receipt'] and str(row['Receipt']).startswith("data:image"):
+                    st.image(row['Receipt'], width=300, caption="User's Payment Receipt")
+                if "Paid" not in str(row['Status']):
+                    if st.button("Mark as Paid ✅", key=f"paid_{idx}"):
+                        requests.post(SCRIPT_URL, json={"action":"mark_paid", "invoice_id":row['Invoice_ID']})
+                        st.success("Order Updated!"); time.sleep(0.5); st.rerun()
+    
+    with t2:
+        st.subheader("All Registered Users")
+        st.dataframe(users_df, use_container_width=True)
+    
+    with t3:
+        st.subheader("Customer Reviews")
+        st.dataframe(feedback_df, use_container_width=True)
 
+# --- PROFILE ---
 elif menu == "👤 Profile":
-    st.header("👤 Profile")
-    st.write(f"Name: {u_name}"); st.write(f"Phone: {raw_ph}")
-    up_file = st.file_uploader("Photo", type=['jpg','png'])
-    if up_file and st.button("Save"):
-        b64 = base64.b64encode(up_file.read()).decode()
-        requests.post(SCRIPT_URL, json={"action":"update_photo", "phone":raw_ph, "photo":f"data:image/png;base64,{b64}"})
-        st.success("Updated!"); time.sleep(1); st.rerun()
+    st.title("My Profile Settings")
+    c1, c2 = st.columns([1, 2])
+    with c1:
+        st.image(sidebar_img, width=200)
+    with c2:
+        st.write(f"**Name:** {u_name}")
+        st.write(f"**Phone:** {u_phone}")
+        new_photo = st.file_uploader("Change Profile Picture", type=['png','jpg'])
+        if new_photo and st.button("Update Photo"):
+            b64_img = f"data:image/png;base64,{base64.b64encode(new_photo.read()).decode()}"
+            requests.post(SCRIPT_URL, json={"action":"update_photo", "phone":u_phone, "photo":b64_img})
+            st.success("Photo Updated! Refreshing..."); time.sleep(1); st.rerun()
 
+# --- FEEDBACK ---
 elif menu == "💬 Feedback":
-    st.header("💬 Feedback")
-    f_msg = st.text_area("Message")
-    if st.button("Submit"):
-        requests.post(SCRIPT_URL, json={"action":"feedback", "name":u_name, "phone":raw_ph, "message":f_msg})
-        st.success("Sent!")
+    st.title("Customer Feedback")
+    msg = st.text_area("Share your experience with us...")
+    if st.button("Submit Feedback"):
+        if msg:
+            requests.post(SCRIPT_URL, json={"action":"feedback", "name":u_name, "phone":u_phone, "message":msg})
+            st.success("Thank you for your feedback!")
+        else: st.error("Please write something.")
