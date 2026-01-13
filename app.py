@@ -168,48 +168,68 @@ elif menu == "🛍️ New Order":
                 st.session_state.cart.pop(i); st.rerun()
 
 # ========================================================
-# STEP 9: ORDER - TOTAL BILL
+# STEP 9: ORDER - TOTAL BILL CALCULATION
 # ========================================================
         total_bill = sum(x['Total'] for x in st.session_state.cart)
-        st.info(f"#### Total Bill: Rs. {total_bill}")
+        st.info(f"#### 💰 Total Bill: Rs. {total_bill}")
 
 # ========================================================
-# STEP 10: ORDER - PAYMENT & QR
+# STEP 10: ORDER - PAYMENT METHOD & QR CODE
 # ========================================================
-        pay_method = st.radio("Payment", ["COD", "JazzCash", "EasyPaisa"])
+        pay_method = st.radio("Chose Payment Method", ["COD", "JazzCash", "EasyPaisa"])
         if pay_method != "COD":
-            st.warning(f"Pay to: {JAZZCASH_NO}")
-            qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=Pay-{total_bill}"
+            acc_no = JAZZCASH_NO if pay_method == "JazzCash" else EASYPAISA_NO
+            st.warning(f"Please pay to {pay_method}: {acc_no}")
+            qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=Pay-{total_bill}-to-{acc_no}"
             st.image(qr_url, width=150)
 
 # ========================================================
-# STEP 11: ORDER - INVOICE PDF
+# STEP 11: ORDER - INVOICE PDF GENERATOR FUNCTION
 # ========================================================
-        def create_pdf(inv, name, total):
-            buf = BytesIO()
-            p = canvas.Canvas(buf)
-            p.drawString(100, 750, f"Invoice: {inv} | Name: {name} | Total: {total}")
+        def create_pdf_invoice(inv_id, name, items_list, total):
+            buffer = BytesIO()
+            p = canvas.Canvas(buffer)
+            p.drawString(100, 800, f"Invoice ID: {inv_id}")
+            p.drawString(100, 780, f"Customer: {name}")
+            p.drawString(100, 760, f"Total Bill: Rs. {total}")
             p.save()
-            return buf.getvalue()
+            return buffer.getvalue()
 
 # ========================================================
-# STEP 12: ORDER - CONFIRMATION & DASHBOARD RETURN
+# STEP 12: ORDER - CONFIRMATION & SHEET UPDATE
 # ========================================================
-        if st.button("Confirm Order ✅"):
-            inv_id = f"APF-{int(time.time())}"
-            prods = ", ".join([x['Product'] for x in st.session_state.cart])
-            requests.post(SCRIPT_URL, json={"action":"order", "invoice_id":inv_id, "name":u_name, "phone":raw_ph, "product":prods, "bill":float(total_bill), "payment_method":pay_method})
+        if st.button("Confirm Order ✅", use_container_width=True):
+            invoice_id = f"APF-{int(time.time())}"
+            all_products = ", ".join([f"{x['Qty']}x {x['Product']}" for x in st.session_state.cart])
             
+            # Google Sheet mein data bhejna
+            order_payload = {
+                "action": "order", 
+                "invoice_id": invoice_id, 
+                "name": u_name, 
+                "phone": raw_ph, 
+                "product": all_products, 
+                "bill": float(total_bill), 
+                "payment_method": pay_method
+            }
+            requests.post(SCRIPT_URL, json=order_payload)
+            
+            # Cart khali karna aur Dashboard par janay ki tayari
             st.session_state.cart = []
-            st.session_state.menu_choice = "🏠 Dashboard" # Redirection set
-            st.success("Order Placed!")
+            st.success("Order Placed Successfully! Redirecting...")
+            
+            # Ye raha redirection ka sahi tareeqa jo error khatam kar dega
+            st.session_state.menu_choice = "🏠 Dashboard"
             time.sleep(1)
             st.rerun()
 
 # ========================================================
-# STEP 13: ORDER - WHATSAPP
+# STEP 13: ORDER - WHATSAPP NOTIFICATION (Redirect Fix)
 # ========================================================
-            st.write("WhatsApp Alert Sent.")
+        # Ye step sirf tab dikhayi dega agar cart khali na ho aur confirm se pehle ho
+        whatsapp_msg = f"*New Order ID:* {u_name}\n*Total:* Rs.{total_bill}"
+        wa_link = f"https://wa.me/923005508112?text={requests.utils.quote(whatsapp_msg)}"
+        st.markdown(f'<a href="{wa_link}" target="_blank">📲 Open WhatsApp for Support</a>', unsafe_allow_html=True)
 
 # ========================================================
 # STEP 14: HISTORY
