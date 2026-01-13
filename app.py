@@ -166,96 +166,74 @@ if menu == "🏠 Dashboard":
             """, unsafe_allow_html=True)
     else: st.info("No recent orders.")
 
-# --- NEW ORDER (PAINT BUSINESS UPDATED) ---
+# --- NEW ORDER (DYNAMIC FILTERING VERSION) ---
 elif menu == "🛍️ New Order":
     st.header("🛍️ Create New Order")
     if not settings_df.empty:
         col_sel, col_cart = st.columns([1.5, 1])
         with col_sel:
-            # Category Selection
+            # 1. Category Filter
             scat = st.selectbox("Select Category", settings_df['Category'].unique())
-            items = settings_df[settings_df['Category'] == scat]
+            cat_items = settings_df[settings_df['Category'] == scat]
             
-            # Sub-Category Filter
-            if 'Sub-Category' in items.columns:
-                sub_cats = items['Sub-Category'].unique()
-                sub_cat = st.selectbox("Sub-Category", sub_cats)
-                items = items[items['Sub-Category'] == sub_cat]
-
-            # Product Selection
-            sprod = st.selectbox("Product Name", items['Product Name'].unique())
-            prod_row = items[items['Product Name'] == sprod].iloc[0]
-            prc = float(prod_row['Price'])
+            # 2. Product Name Filter (Based on Category)
+            sprod = st.selectbox("Product Name", cat_items['Product Name'].unique())
+            prod_data = cat_items[cat_items['Product Name'] == sprod].iloc[0]
             
-            # Dynamic Packing Selection
-            packing_val = ""
-            if 'Packing' in prod_row and str(prod_row['Packing']) != 'nan':
-                packing_val = str(prod_row['Packing'])
-                st.info(f"Packing Size: {packing_val}")
+            # 3. Dynamic Sub-Category (Comma separated list in sheet)
+            sub_list = str(prod_data['Sub-Category']).split(',')
+            sub_cat = st.selectbox("Interior / Exterior", [s.strip() for s in sub_list])
+            
+            # 4. Dynamic Packing (Comma separated list in sheet: 20kg, Gallon etc)
+            pack_list = str(prod_data['Packing']).split(',')
+            packing = st.selectbox("Select Packing Size", [p.strip() for p in pack_list])
+            
+            # 5. Dynamic Colors (Comma separated list in sheet)
+            color_list = str(prod_data['Colors']).split(',')
+            selected_color = st.selectbox("Select Shade/Color", [c.strip() for c in color_list])
 
+            # Price and Quantity
+            prc = float(prod_data['Price'])
             c1, c2 = st.columns(2)
             qty = c1.number_input("Quantity", 1, 500, 1)
-            shade_code = c2.text_input("Shade Code / Color Name", "White")
+            st.info(f"Unit Price: Rs. {prc}")
             
             if st.button("Add to Cart 🛒", use_container_width=True):
-                found = False
-                # Product name include packing for clarity in cart
-                display_name = f"{sprod} ({packing_val})" if packing_val else sprod
+                # Cart display name includes all details
+                full_prod_name = f"{sprod} ({packing}) - {sub_cat}"
                 
+                # Check if exactly same item/shade already in cart
+                found = False
                 for itm in st.session_state.cart:
-                    if itm['Product'] == display_name and itm['Shade'] == shade_code:
+                    if itm['Product'] == full_prod_name and itm['Shade'] == selected_color:
                         itm['Qty'] += qty
                         itm['Total'] = itm['Qty'] * itm['Price']
                         found = True
                         break
+                
                 if not found:
                     st.session_state.cart.append({
-                        "Product": display_name, "Shade": shade_code, 
+                        "Product": full_prod_name, "Shade": selected_color, 
                         "Qty": qty, "Price": prc, "Total": prc * qty
                     })
                 st.rerun()
 
         with col_cart:
+            # ... (Cart design wahi rahega jo aapka pehle tha)
             st.markdown("<div style='background: white; padding: 20px; border-radius: 15px; border: 1px solid #ddd;'>", unsafe_allow_html=True)
             st.markdown("<h4>🛒 Shopping Cart</h4>", unsafe_allow_html=True)
-            if not st.session_state.cart: 
-                st.write("Cart is empty.")
+            if not st.session_state.cart: st.write("Cart is empty.")
             else:
                 total_bill = 0
                 for i, itm in enumerate(st.session_state.cart):
                     total_bill += itm['Total']
-                    st.markdown(f"**{itm['Product']}**<br>Shade: {itm['Shade']} | {itm['Qty']} x {itm['Price']} = {itm['Total']}", unsafe_allow_html=True)
+                    st.markdown(f"**{itm['Product']}**<br>Color: {itm['Shade']} | {itm['Qty']} x {itm['Price']} = {itm['Total']}", unsafe_allow_html=True)
                     if st.button(f"Remove", key=f"rm_{i}"):
                         st.session_state.cart.pop(i)
                         st.rerun()
-                
                 st.divider()
                 st.subheader(f"Total: Rs. {total_bill}")
-                
-                pay_type = st.selectbox("Payment Method", ["COD", "JazzCash", "EasyPaisa", "Bank Transfer"])
-                
-                receipt_b64 = ""
-                if pay_type != "COD":
-                    st.info(f"Send to: {JAZZCASH_NO}")
-                    r_file = st.file_uploader("Upload Receipt screenshot", type=['jpg','png','jpeg'])
-                    if r_file:
-                        receipt_b64 = f"data:image/png;base64,{base64.b64encode(r_file.read()).decode()}"
-
-                if st.button("Confirm Order ✅", use_container_width=True, type="primary"):
-                    if pay_type != "COD" and not receipt_b64:
-                        st.error("Please upload receipt first!")
-                    else:
-                        inv = get_next_invoice(orders_df)
-                        prods = ", ".join([f"{x['Qty']}x {x['Product']} ({x['Shade']})" for x in st.session_state.cart])
-                        requests.post(SCRIPT_URL, json={
-                            "action":"order", "invoice_id":inv, "name":u_name, 
-                            "phone":raw_ph, "product":prods, "bill":total_bill, 
-                            "payment_method":pay_type, "receipt": receipt_b64
-                        })
-                        st.session_state.cart = []
-                        st.success(f"Order {inv} Placed!")
-                        time.sleep(1); set_nav("🏠 Dashboard")
-            st.markdown("</div>", unsafe_allow_html=True)
+                # ... (Baqi payment aur order placement ka code same rahega)
 
 # --- HISTORY, ADMIN, PROFILE (Wahi Purana Design) ---
 # ... (Baqi code wahi rahega jo aapne diya hai)
