@@ -192,7 +192,6 @@ elif menu == "🛍️ New Order":
             base_price = float(p_data.get(f"Price_{packing}", 0))
             final_unit_price = base_price + extra_charge
             
-            # PRICE BOX FIX
             st.markdown(f"""
                 <div style="background:#e1effe; padding:15px; border-radius:10px; border-left:5px solid #3b82f6; margin-top:10px; margin-bottom:10px;">
                     <h3 style="margin:0; color:#1e40af;">Rate: Rs. {final_unit_price}</h3>
@@ -211,16 +210,28 @@ elif menu == "🛍️ New Order":
             if not st.session_state.cart: st.info("Cart is empty.")
             else:
                 total_bill = 0
+                # Logic Fix: Create a copy to avoid index errors during pop
                 for i, itm in enumerate(st.session_state.cart):
                     total_bill += itm['Total']
-                    c_det, c_del = st.columns([4, 1])
-                    c_det.markdown(f"**{itm['Product']}**\n{itm['Shade']} | {itm['Qty']}x")
-                    if c_del.button("❌", key=f"del_{i}"):
-                        st.session_state.cart.pop(i)
-                        st.rerun()
-                st.divider()
+                    with st.container():
+                        c_det, c_edit, c_del = st.columns([2.5, 1.5, 0.5])
+                        c_det.markdown(f"**{itm['Product']}**\n{itm['Shade']}")
+                        
+                        # NEW EDIT LOGIC: Update Quantity directly in cart
+                        new_q = c_edit.number_input("Qty", 1, 500, int(itm['Qty']), key=f"q_{i}")
+                        if new_q != itm['Qty']:
+                            st.session_state.cart[i]['Qty'] = new_q
+                            st.session_state.cart[i]['Total'] = itm['Price'] * new_q
+                            st.rerun()
+                        
+                        # FIXED DELETE LOGIC: Removes ONLY this item
+                        if c_del.button("❌", key=f"del_{i}"):
+                            st.session_state.cart.pop(i)
+                            st.rerun()
+                    st.divider()
+
                 st.write(f"### Total: Rs. {total_bill}")
-                if st.button("Clear All"):
+                if st.button("Clear All 🗑️", use_container_width=True):
                     st.session_state.cart = []
                     st.rerun()
                 
