@@ -48,6 +48,19 @@ def normalize_ph(n):
     if s and not s.startswith('0'): return '0' + s
     return s
 
+# Function to generate next invoice number
+def get_next_invoice(orders_df):
+    if orders_df.empty or 'Invoice_ID' not in orders_df.columns:
+        return "INV-0001"
+    try:
+        # Extract numbers from "INV-xxxx" and find the maximum
+        last_inv = orders_df['Invoice_ID'].str.extract('(\d+)').astype(float).max()[0]
+        if pd.isna(last_inv): return "INV-0001"
+        next_val = int(last_inv) + 1
+        return f"INV-{next_val:04d}"
+    except:
+        return f"INV-{int(time.time())}"
+
 # ========================================================
 # STEP 3: SESSION STATE
 # ========================================================
@@ -160,33 +173,44 @@ elif menu == "🛍️ New Order":
         col_sel, col_cart = st.columns([1.5, 1])
         with col_sel:
             # Category Selection
-            scat = st.selectbox("Category", settings_df['Category'].unique())
+            scat = st.selectbox("Select Category", settings_df['Category'].unique())
             items = settings_df[settings_df['Category'] == scat]
             
-            # Sub-Category Filter (Optional)
+            # Sub-Category Filter
             if 'Sub-Category' in items.columns:
-                sub_cat = st.selectbox("Sub-Category", items['Sub-Category'].unique())
+                sub_cats = items['Sub-Category'].unique()
+                sub_cat = st.selectbox("Sub-Category", sub_cats)
                 items = items[items['Sub-Category'] == sub_cat]
 
-            sprod = st.selectbox("Product Name", items['Product Name'])
-            prc = float(items[items['Product Name'] == sprod]['Price'].values[0])
+            # Product Selection
+            sprod = st.selectbox("Product Name", items['Product Name'].unique())
+            prod_row = items[items['Product Name'] == sprod].iloc[0]
+            prc = float(prod_row['Price'])
             
+            # Dynamic Packing Selection
+            packing_val = ""
+            if 'Packing' in prod_row and str(prod_row['Packing']) != 'nan':
+                packing_val = str(prod_row['Packing'])
+                st.info(f"Packing Size: {packing_val}")
+
             c1, c2 = st.columns(2)
             qty = c1.number_input("Quantity", 1, 500, 1)
-            shade_code = c2.text_input("Shade Code / Note", "White")
+            shade_code = c2.text_input("Shade Code / Color Name", "White")
             
             if st.button("Add to Cart 🛒", use_container_width=True):
-                # Update existing item or add new
                 found = False
+                # Product name include packing for clarity in cart
+                display_name = f"{sprod} ({packing_val})" if packing_val else sprod
+                
                 for itm in st.session_state.cart:
-                    if itm['Product'] == sprod and itm['Shade'] == shade_code:
+                    if itm['Product'] == display_name and itm['Shade'] == shade_code:
                         itm['Qty'] += qty
                         itm['Total'] = itm['Qty'] * itm['Price']
                         found = True
                         break
                 if not found:
                     st.session_state.cart.append({
-                        "Product": sprod, "Shade": shade_code, 
+                        "Product": display_name, "Shade": shade_code, 
                         "Qty": qty, "Price": prc, "Total": prc * qty
                     })
                 st.rerun()
@@ -200,7 +224,7 @@ elif menu == "🛍️ New Order":
                 total_bill = 0
                 for i, itm in enumerate(st.session_state.cart):
                     total_bill += itm['Total']
-                    st.markdown(f"**{itm['Product']}** ({itm['Shade']})<br>{itm['Qty']} x {itm['Price']} = {itm['Total']}", unsafe_allow_html=True)
+                    st.markdown(f"**{itm['Product']}**<br>Shade: {itm['Shade']} | {itm['Qty']} x {itm['Price']} = {itm['Total']}", unsafe_allow_html=True)
                     if st.button(f"Remove", key=f"rm_{i}"):
                         st.session_state.cart.pop(i)
                         st.rerun()
@@ -210,19 +234,18 @@ elif menu == "🛍️ New Order":
                 
                 pay_type = st.selectbox("Payment Method", ["COD", "JazzCash", "EasyPaisa", "Bank Transfer"])
                 
-                # Receipt Upload Logic
                 receipt_b64 = ""
                 if pay_type != "COD":
                     st.info(f"Send to: {JAZZCASH_NO}")
-                    r_file = st.file_uploader("Upload Payment Receipt", type=['jpg','png','jpeg'])
+                    r_file = st.file_uploader("Upload Receipt screenshot", type=['jpg','png','jpeg'])
                     if r_file:
                         receipt_b64 = f"data:image/png;base64,{base64.b64encode(r_file.read()).decode()}"
 
                 if st.button("Confirm Order ✅", use_container_width=True, type="primary"):
                     if pay_type != "COD" and not receipt_b64:
-                        st.error("Please upload payment receipt screenshot!")
+                        st.error("Please upload receipt first!")
                     else:
-                        inv = f"INV-{int(time.time())}"
+                        inv = get_next_invoice(orders_df)
                         prods = ", ".join([f"{x['Qty']}x {x['Product']} ({x['Shade']})" for x in st.session_state.cart])
                         requests.post(SCRIPT_URL, json={
                             "action":"order", "invoice_id":inv, "name":u_name, 
@@ -230,11 +253,12 @@ elif menu == "🛍️ New Order":
                             "payment_method":pay_type, "receipt": receipt_b64
                         })
                         st.session_state.cart = []
-                        st.success("Order Placed!")
+                        st.success(f"Order {inv} Placed!")
                         time.sleep(1); set_nav("🏠 Dashboard")
             st.markdown("</div>", unsafe_allow_html=True)
 
-# --- HISTORY ---
+# --- HISTORY, ADMIN, PROFILE (Wahi Purana Design) ---
+# ... (Baqi code wahi rahega jo aapne diya hai)
 elif menu == "📜 History":
     st.header("📜 Order History")
     u_ords = orders_df[orders_df['Phone'].apply(normalize_ph) == raw_ph]
@@ -256,7 +280,6 @@ elif menu == "📜 History":
             """, unsafe_allow_html=True)
     else: st.info("No orders yet.")
 
-# --- ADMIN PANEL ---
 elif menu == "🔐 Admin":
     st.header("🛡️ Admin Control")
     t1, t2, t3 = st.tabs(["📦 Orders", "👥 Users", "💬 Feedback"])
@@ -270,7 +293,6 @@ elif menu == "🔐 Admin":
                     if st.button(f"Mark Paid", key=f"adm_p_{idx}"):
                         requests.post(SCRIPT_URL, json={"action":"mark_paid", "invoice_id":row['Invoice_ID']})
                         st.rerun()
-    # Users & Feedback tabs remain same as your code
     with t2:
         p_u = users_df[users_df['Role'].str.lower() == 'pending']
         for idx, u in p_u.iterrows():
@@ -281,7 +303,6 @@ elif menu == "🔐 Admin":
     with t3:
         st.dataframe(feedback_df, use_container_width=True)
 
-# Profile & Feedback modules remain unchanged to keep your original design.
 elif menu == "👤 Profile":
     st.markdown("### 👤 Profile Settings")
     c1, c2 = st.columns([1, 1])
@@ -295,6 +316,7 @@ elif menu == "👤 Profile":
             b64 = base64.b64encode(img_file.read()).decode()
             requests.post(SCRIPT_URL, json={"action":"update_photo", "phone":raw_ph, "photo":f"data:image/png;base64,{b64}"})
             st.success("Photo Updated!"); time.sleep(1); st.rerun()
+
 elif menu == "💬 Feedback":
     st.header("💬 Feedback")
     f_msg = st.text_area("How was your experience?")
