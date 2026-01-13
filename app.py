@@ -59,10 +59,17 @@ def get_next_invoice(df):
         return f"{len(df) + 1:04d}"
 
 # ========================================================
-# STEP 3: SESSION STATE
+# STEP 3: SESSION STATE (Added Edit States)
 # ========================================================
 if 'logged_in' not in st.session_state:
-    st.session_state.update({'logged_in': False, 'user_data': {}, 'cart': [], 'menu_choice': "🏠 Dashboard"})
+    st.session_state.update({
+        'logged_in': False, 
+        'user_data': {}, 
+        'cart': [], 
+        'menu_choice': "🏠 Dashboard",
+        'edit_mode': False,
+        'edit_vals': {}
+    })
 
 def set_nav(target):
     st.session_state.menu_choice = target
@@ -166,18 +173,28 @@ elif menu == "🛍️ New Order":
     st.header("🛍️ Create New Order")
     if not settings_df.empty:
         col_sel, col_cart = st.columns([1.5, 1])
+        
+        # Selection Logic
         with col_sel:
             st.subheader("🎯 Selection")
-            scat = st.selectbox("Category", settings_df['Category'].unique())
+            
+            # Pre-fill if Editing
+            def_cat = st.session_state.edit_vals.get('cat', settings_df['Category'].unique()[0])
+            scat = st.selectbox("Category", settings_df['Category'].unique(), index=list(settings_df['Category'].unique()).index(def_cat) if def_cat in settings_df['Category'].unique() else 0)
+            
             cat_items = settings_df[settings_df['Category'] == scat]
-            sprod = st.selectbox("Product Name", cat_items['Product Name'].unique())
+            def_prod = st.session_state.edit_vals.get('prod', cat_items['Product Name'].unique()[0])
+            sprod = st.selectbox("Product Name", cat_items['Product Name'].unique(), index=list(cat_items['Product Name'].unique()).index(def_prod) if def_prod in cat_items['Product Name'].unique() else 0)
+            
             p_data = cat_items[cat_items['Product Name'] == sprod].iloc[0]
             
             all_colors_raw = [c.strip() for c in str(p_data['Colors']).split(',')]
             oos_colors = [c.strip() for c in str(p_data.get('Out_of_Stock_Colors', '')).split(',')]
             available_colors = [c for c in all_colors_raw if c.split(':')[0] not in oos_colors and c != '']
             color_options = [c.split(':')[0] for c in available_colors]
-            selected_color_name = st.selectbox("Select Shade", color_options)
+            
+            def_color = st.session_state.edit_vals.get('shade', color_options[0] if color_options else "")
+            selected_color_name = st.selectbox("Select Shade", color_options, index=color_options.index(def_color) if def_color in color_options else 0)
             
             extra_charge = 0
             for c in available_colors:
@@ -188,7 +205,9 @@ elif menu == "🛍️ New Order":
             for p in ["20kg", "Gallon", "Quarter"]:
                 if float(p_data.get(f"Price_{p}", 0)) > 0: valid_packs.append(p)
             
-            packing = st.radio("Select Size", valid_packs, horizontal=True)
+            def_pack = st.session_state.edit_vals.get('pack', valid_packs[0] if valid_packs else "")
+            packing = st.radio("Select Size", valid_packs, index=valid_packs.index(def_pack) if def_pack in valid_packs else 0, horizontal=True)
+            
             base_price = float(p_data.get(f"Price_{packing}", 0))
             final_unit_price = base_price + extra_charge
             
@@ -199,39 +218,56 @@ elif menu == "🛍️ New Order":
                 </div>
             """, unsafe_allow_html=True)
             
-            qty = st.number_input("Quantity", 1, 500, 1)
-            if st.button("Add to List 🛒", use_container_width=True):
-                st.session_state.cart.append({"Product": f"{sprod} ({packing})", "Shade": selected_color_name, "Qty": qty, "Price": final_unit_price, "Total": final_unit_price * qty})
+            def_qty = st.session_state.edit_vals.get('qty', 1)
+            qty = st.number_input("Quantity", 1, 500, def_qty)
+            
+            btn_label = "Update Item 🔄" if st.session_state.edit_mode else "Add to List 🛒"
+            if st.button(btn_label, use_container_width=True):
+                st.session_state.cart.append({
+                    "Product": f"{sprod} ({packing})", 
+                    "Shade": selected_color_name, 
+                    "Qty": qty, 
+                    "Price": final_unit_price, 
+                    "Total": final_unit_price * qty,
+                    "raw_prod": sprod,
+                    "raw_pack": packing,
+                    "raw_cat": scat
+                })
+                st.session_state.edit_mode = False
+                st.session_state.edit_vals = {}
                 st.rerun()
 
+        # Cart Display Logic
         with col_cart:
             st.markdown("<div style='background:white; padding:20px; border-radius:15px; border:1px solid #ddd;'>", unsafe_allow_html=True)
             st.subheader("📋 Order Review")
             if not st.session_state.cart: st.info("Cart is empty.")
             else:
                 total_bill = 0
-                # Logic Fix: Create a copy to avoid index errors during pop
                 for i, itm in enumerate(st.session_state.cart):
                     total_bill += itm['Total']
-                    with st.container():
-                        c_det, c_edit, c_del = st.columns([2.5, 1.5, 0.5])
-                        c_det.markdown(f"**{itm['Product']}**\n{itm['Shade']}")
+                    c_det, c_edit, c_del = st.columns([3, 1, 1])
+                    c_det.markdown(f"**{itm['Product']}**\n{itm['Shade']} | {itm['Qty']}x")
+                    
+                    # EDIT LOGIC (Pencil Icon)
+                    if c_edit.button("✏️", key=f"ed_{i}"):
+                        st.session_state.edit_mode = True
+                        st.session_state.edit_vals = {
+                            'cat': itm.get('raw_cat'),
+                            'prod': itm.get('raw_prod'),
+                            'pack': itm.get('raw_pack'),
+                            'shade': itm['Shade'],
+                            'qty': itm['Qty']
+                        }
+                        st.session_state.cart.pop(i) # Remove from cart to re-add after edit
+                        st.rerun()
                         
-                        # NEW EDIT LOGIC: Update Quantity directly in cart
-                        new_q = c_edit.number_input("Qty", 1, 500, int(itm['Qty']), key=f"q_{i}")
-                        if new_q != itm['Qty']:
-                            st.session_state.cart[i]['Qty'] = new_q
-                            st.session_state.cart[i]['Total'] = itm['Price'] * new_q
-                            st.rerun()
-                        
-                        # FIXED DELETE LOGIC: Removes ONLY this item
-                        if c_del.button("❌", key=f"del_{i}"):
-                            st.session_state.cart.pop(i)
-                            st.rerun()
-                    st.divider()
-
+                    if c_del.button("❌", key=f"del_{i}"):
+                        st.session_state.cart.pop(i)
+                        st.rerun()
+                st.divider()
                 st.write(f"### Total: Rs. {total_bill}")
-                if st.button("Clear All 🗑️", use_container_width=True):
+                if st.button("Clear All"):
                     st.session_state.cart = []
                     st.rerun()
                 
