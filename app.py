@@ -99,21 +99,62 @@ if st.sidebar.button("Logout 🚪"):
 menu = st.session_state.menu_choice
 
 # ========================================================
-# STEP 6: PROFILE MODULE (Recovered)
+# STEP 6: SOCIAL MEDIA STYLE PROFILE (Locked Name/Phone)
 # ========================================================
-if menu == "👤 Profile":
-    st.header("👤 My Profile")
-    st.write(f"**Name:** {u_name}")
-    st.write(f"**Phone:** {raw_ph}")
+elif menu == "👤 Profile":
+    st.markdown("### 👤 User Profile Settings")
     
-    with st.expander("Update Photo"):
-        img_file = st.file_uploader("Choose Image", type=['png', 'jpg', 'jpeg'], key="profile_pic_upload")
-        if img_file and st.button("Save Photo ✅"):
-            b64 = base64.b64encode(img_file.read()).decode()
-            photo_data = f"data:image/png;base64,{b64}"
-            requests.post(SCRIPT_URL, json={"action":"update_photo", "phone":raw_ph, "photo":photo_data})
-            st.session_state.user_data['Photo'] = photo_data
-            st.success("Photo Updated!"); time.sleep(1); st.rerun()
+    # User Card UI
+    st.markdown(f"""
+    <div style="background-color: #f8f9fa; padding: 20px; border-radius: 15px; border-left: 5px solid #3b82f6; margin-bottom: 20px;">
+        <div style="display: flex; align-items: center;">
+            <img src="{sidebar_img}" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; margin-right: 20px; border: 2px solid #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+            <div>
+                <h2 style="margin: 0; color: #1f2937;">{u_name}</h2>
+                <p style="margin: 0; color: #6b7280;">📱 {raw_ph}</p>
+                <span style="background: #e5e7eb; padding: 2px 8px; border-radius: 10px; font-size: 12px;">Active Member</span>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("🖼️ Change Profile Picture")
+        img_file = st.file_uploader("Upload new photo", type=['png', 'jpg', 'jpeg'], key="prof_img_up")
+        if img_file:
+            if st.button("Update Photo Now ✨"):
+                b64 = base64.b64encode(img_file.read()).decode()
+                photo_data = f"data:image/png;base64,{b64}"
+                # API Call to Google Sheet
+                requests.post(SCRIPT_URL, json={"action":"update_photo", "phone":raw_ph, "photo":photo_data})
+                st.session_state.user_data['Photo'] = photo_data
+                st.success("Profile picture updated!")
+                time.sleep(1)
+                st.rerun()
+
+    with col2:
+        st.subheader("🔐 Security Settings")
+        new_pw = st.text_input("New Password", type="password", placeholder="Enter new password", key="new_pass_input")
+        conf_pw = st.text_input("Confirm Password", type="password", placeholder="Repeat password", key="conf_pass_input")
+        
+        if st.button("Change Password 🛡️"):
+            if new_pw and new_pw == conf_pw:
+                # API Call to Google Sheet
+                response = requests.post(SCRIPT_URL, json={
+                    "action": "update_password", 
+                    "phone": raw_ph, 
+                    "password": new_pw
+                })
+                st.success("Password changed successfully!")
+            elif new_pw != conf_pw:
+                st.error("Passwords do not match!")
+            else:
+                st.warning("Please enter a new password.")
+
+    # Information Alert (To show why Name/Phone are locked)
+    st.info("ℹ️ **Note:** Name and Phone number are verified by admin and cannot be changed from here. Please contact support for any corrections.")
 
 # ========================================================
 # STEP 6 (Main): DASHBOARD
