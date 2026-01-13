@@ -7,15 +7,6 @@ from reportlab.pdfgen import canvas
 import base64
 import time
 
-import streamlit as st
-import pandas as pd
-import requests
-from datetime import datetime
-from io import BytesIO
-from reportlab.pdfgen import canvas
-import base64
-import time
-
 # ========================================================
 # STEP 1: CONFIGURATION & LINKS
 # ========================================================
@@ -24,7 +15,7 @@ SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwLQRD3dIUkQbNUi-Blo5WvBYq
 JAZZCASH_NO = "03005508112"
 EASYPAISA_NO = "03005508112"
 
-# --- UI Styling ---
+# UI Styling
 st.markdown("""
 <style>
     .stButton>button { width: 100%; border-radius: 8px; background-color: #3b82f6; color: white; border: none; }
@@ -53,7 +44,13 @@ users_df, settings_df, orders_df, feedback_df = load_all_data()
 # STEP 3: SESSION STATE & HELPERS
 # ========================================================
 if 'logged_in' not in st.session_state:
-    st.session_state.update({'logged_in': False, 'user_data': {}, 'cart': [], 'is_admin': False, 'menu_choice': "🏠 Dashboard"})
+    st.session_state.update({
+        'logged_in': False, 
+        'user_data': {}, 
+        'cart': [], 
+        'is_admin': False,
+        'menu_choice': "🏠 Dashboard" # Default page
+    })
 
 def normalize_ph(n):
     s = str(n).strip().split('.')[0]
@@ -89,7 +86,7 @@ if not st.session_state.logged_in:
     st.stop()
 
 # ========================================================
-# STEP 5: SIDEBAR
+# STEP 5: SIDEBAR & NAVIGATION
 # ========================================================
 else:
     u_name = st.session_state.user_data.get('Name', 'User')
@@ -100,34 +97,33 @@ else:
     st.sidebar.markdown(f'<div style="text-align:center"><img src="{sidebar_img}" class="profile-img"></div>', unsafe_allow_html=True)
     st.sidebar.markdown(f"<h3 style='text-align: center;'>👤 {u_name}</h3>", unsafe_allow_html=True)
     
-    # Dashboard option added to nav
     nav = ["🏠 Dashboard", "👤 Profile", "🛍️ New Order", "📜 History", "💬 Feedback"]
     if st.session_state.is_admin: nav.append("🔐 Admin")
     
-    # Menu value handled by session state
+    # Hum 'menu_choice' key use kar rahe hain redirection ke liye
     menu = st.sidebar.radio("Navigation", nav, key="menu_choice")
     
     if st.sidebar.button("Logout 🚪"):
         st.session_state.clear(); st.rerun()
 
 # ========================================================
-# DASHBOARD MODULE (NEW)
+# NEW: DASHBOARD MODULE
 # ========================================================
 if menu == "🏠 Dashboard":
-    st.header(f"Dashboard - Welcome {u_name}")
+    st.header(f"Welcome to Dashboard, {u_name}")
     
-    # Filtering user's own data
+    # User specific data
     my_orders = orders_df[orders_df['Phone'].apply(normalize_ph) == raw_ph]
     
-    col1, col2, col3 = st.columns(3)
-    col1.metric("My Total Orders", len(my_orders))
-    col2.metric("Total Spent", f"Rs. {my_orders['Bill'].sum()}")
+    c1, c2 = st.columns(2)
+    c1.metric("Total Orders", len(my_orders))
+    c2.metric("Total Spending", f"Rs. {my_orders['Bill'].sum()}")
     
-    st.subheader("Recent Updates")
+    st.subheader("Your Latest Orders")
     if my_orders.empty:
-        st.info("No orders found. Go to 'New Order' to start shopping!")
+        st.info("No orders found.")
     else:
-        st.table(my_orders.tail(3)[['Date', 'Invoice_ID', 'Status']])
+        st.dataframe(my_orders.tail(5)[['Date', 'Invoice_ID', 'Product', 'Status']], use_container_width=True)
 
 # ========================================================
 # STEP 6: PROFILE
@@ -216,16 +212,15 @@ elif menu == "🛍️ New Order":
         if st.button("Confirm Order ✅", use_container_width=True):
             invoice_id = f"APF-{int(time.time())}"
             all_products = ", ".join([f"{x['Qty']}x {x['Product']}" for x in st.session_state.cart])
+            
             order_payload = {"action": "order", "invoice_id": invoice_id, "name": u_name, "phone": raw_ph, "product": all_products, "bill": float(total_bill), "payment_method": pay_method}
             requests.post(SCRIPT_URL, json=order_payload)
             
-            pdf_data = create_pdf_invoice(invoice_id, u_name, all_products, total_bill)
-            st.download_button("📥 Download Receipt", pdf_data, file_name=f"{invoice_id}.pdf")
-            
             st.session_state.cart = []
-            st.success("Order Placed! Redirecting...")
-            time.sleep(2)
-            st.session_state.menu_choice = "🏠 Dashboard" # Redirect to Dashboard
+            st.success("Order Placed! Redirecting to Dashboard...")
+            time.sleep(1.5)
+            # Redirecting to Dashboard
+            st.session_state.menu_choice = "🏠 Dashboard"
             st.rerun()
 
 # ========================================================
@@ -245,10 +240,22 @@ elif menu == "📜 History":
     else: st.dataframe(user_orders[['Date', 'Invoice_ID', 'Product', 'Bill', 'Status']], use_container_width=True)
 
 # ========================================================
-# STEP 15: FANCY FEEDBACK SYSTEM (Dashboard Redirect Fix)
+# STEP 15: FANCY FEEDBACK SYSTEM (FIXED LINE 262)
 # ========================================================
 elif menu == "💬 Feedback":
     st.subheader("🌟 Share Your Experience")
+    
+    st.markdown(f"""
+    <div style="background: white; padding: 25px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); border: 1px solid #f1f5f9; margin-bottom: 20px;">
+        <div style="color: #64748b; font-size: 0.9em; margin-bottom: 5px;">Customer Name</div>
+        <div style="color: #1e293b; font-weight: 600; font-size: 1.1em; margin-bottom: 15px;">👤 {u_name}</div>
+        <div style="color: #64748b; font-size: 0.9em; margin-bottom: 5px;">Phone Number</div>
+        <div style="color: #1e293b; font-weight: 600; font-size: 1.1em; margin-bottom: 15px;">📞 {raw_ph}</div>
+        <div style="color: #64748b; font-size: 0.9em; margin-bottom: 5px;">Current Date</div>
+        <div style="color: #1e293b; font-weight: 600; font-size: 1.1em;">📅 {datetime.now().strftime('%d %b, %Y')}</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
     f_msg = st.text_area("Write message", placeholder="Type here...", height=150, key="f_input")
     
     if st.button("Submit Feedback 📩", use_container_width=True):
@@ -258,11 +265,15 @@ elif menu == "💬 Feedback":
                 requests.post(SCRIPT_URL, json=payload)
                 st.balloons()
                 st.success("✅ Thank you! Redirecting to Dashboard...")
-                time.sleep(2)
-                st.session_state.f_input = "" 
-                st.session_state.menu_choice = "🏠 Dashboard" # Yahan Dashboard par wapsi ho rahi hai
+                
+                time.sleep(1.5)
+                st.session_state.f_input = "" # Box clear
+                
+                # FIX FOR LINE 262: Sidebar key 'menu_choice' use karain
+                st.session_state.menu_choice = "🏠 Dashboard" 
                 st.rerun()
-        else: st.warning("Please type something.")
+        else:
+            st.warning("⚠️ Please type a message.")
 
 # ========================================================
 # STEP 16: UPDATED ADMIN PANEL & DASHBOARD
