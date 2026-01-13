@@ -49,16 +49,20 @@ def set_nav(target):
     st.rerun()
 
 # ========================================================
-# STEP 4: LOGIN & REGISTER
+# STEP 4: LOGIN & REGISTER (FIXED DUPLICATE ID ERROR)
 # ========================================================
 if not st.session_state.logged_in:
     t1, t2 = st.tabs(["🔐 Login", "📝 Register"])
+    
     with t1:
-        l_ph = st.text_input("Phone")
-        l_pw = st.text_input("Password", type="password")
-        if st.button("Login 🚀"):
+        # Unique key 'login_ph' aur 'login_pw' ka use
+        l_ph = st.text_input("Phone", key="login_ph")
+        l_pw = st.text_input("Password", type="password", key="login_pw")
+        
+        if st.button("Login 🚀", key="btn_login"):
             u_ph = normalize_ph(l_ph)
             match = users_df[(users_df['Phone'].apply(normalize_ph) == u_ph) & (users_df['Password'].astype(str) == l_pw)]
+            
             if not match.empty:
                 user_row = match.iloc[0]
                 if str(user_row['Role']).lower() == 'pending': 
@@ -67,16 +71,27 @@ if not st.session_state.logged_in:
                     st.session_state.logged_in = True
                     st.session_state.user_data = user_row.to_dict()
                     st.rerun()
-            else: st.error("Login Failed")
-    with t2:
-        r_name = st.text_input("Name")
-        r_ph = st.text_input("Phone Number")
-        r_pw = st.text_input("Password", type="password")
-        if st.button("Register ✨"):
-            requests.post(SCRIPT_URL, json={"action":"register", "name":r_name, "phone":normalize_ph(r_ph), "password":r_pw})
-            st.success("Registered! Wait for admin.")
-    st.stop()
+            else: 
+                st.error("Login Failed")
 
+    with t2:
+        # Unique key 'reg_name', 'reg_ph', aur 'reg_pw' ka use
+        r_name = st.text_input("Name", key="reg_name")
+        r_ph = st.text_input("Phone Number", key="reg_ph")
+        r_pw = st.text_input("Password", type="password", key="reg_pw") # Error yahan tha, ab fixed hai
+        
+        if st.button("Register ✨", key="btn_reg"):
+            if r_name and r_ph and r_pw:
+                requests.post(SCRIPT_URL, json={
+                    "action":"register", 
+                    "name":r_name, 
+                    "phone":normalize_ph(r_ph), 
+                    "password":r_pw
+                })
+                st.success("Registered! Wait for admin.")
+            else:
+                st.error("Please fill all fields.")
+    st.stop()
 # ========================================================
 # STEP 5: SIDEBAR & NAVIGATION (PERMANENT FIX FOR LINE 74)
 # ========================================================
