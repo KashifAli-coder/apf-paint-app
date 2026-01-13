@@ -81,13 +81,14 @@ if not st.session_state.logged_in:
     st.stop()
 
 # ========================================================
-# STEP 5: SIDEBAR
+# STEP 5: SIDEBAR (Modified with Callback)
 # ========================================================
 else:
     u_name = st.session_state.user_data.get('Name', 'User')
     u_photo = st.session_state.user_data.get('Photo', '')
     raw_ph = normalize_ph(st.session_state.user_data.get('Phone', ''))
     
+    # Sidebar Profile Image
     sidebar_img = u_photo if (u_photo and str(u_photo) != 'nan') else "https://cdn-icons-png.flaticon.com/512/149/149071.png"
     st.sidebar.markdown(f'<div style="text-align:center"><img src="{sidebar_img}" class="profile-img"></div>', unsafe_allow_html=True)
     st.sidebar.markdown(f"<h3 style='text-align: center;'>👤 {u_name}</h3>", unsafe_allow_html=True)
@@ -95,35 +96,31 @@ else:
     nav = ["🏠 Dashboard", "👤 Profile", "🛍️ New Order", "📜 History", "💬 Feedback"]
     if st.session_state.is_admin: nav.append("🔐 Admin")
     
+    # NAVIGATION: Yahan hum sirf 'menu_choice' ko parh rahe hain
     menu = st.sidebar.radio("Navigation", nav, key="menu_choice")
     
     if st.sidebar.button("Logout 🚪"):
         st.session_state.clear(); st.rerun()
 
 # ========================================================
-# DASHBOARD MODULE (Adding Pending Order Alert)
+# DASHBOARD MODULE (With Pending Alert)
 # ========================================================
 if menu == "🏠 Dashboard":
     st.header(f"Dashboard - Welcome {u_name}")
-    
-    # Order data filter karna
     my_orders = orders_df[orders_df['Phone'].apply(normalize_ph) == raw_ph]
     
-    # PENDING ORDER ALERT BOX
-    # Hum check kar rahe hain ke kya koi order 'Pending' ya 'Order' status mein hai
-    pending_list = my_orders[my_orders['Status'].str.contains("Order|Pending", case=False, na=False)]
-    
-    if not pending_list.empty:
-        st.warning(f"⚠️ **Alert:** Aapke {len(pending_list)} order(s) abhi process ho rahe hain.")
-        with st.expander("View Pending Details"):
-            st.table(pending_list[['Date', 'Invoice_ID', 'Bill']])
-    
-    # Summary Metrics
+    # PENDING ALERT BOX
+    pending_orders = my_orders[my_orders['Status'].str.contains("Order|Pending", case=False, na=False)]
+    if not pending_orders.empty:
+        st.markdown(f"""
+        <div style="padding:15px; background-color:#fff3cd; color:#856404; border-radius:10px; border:1px solid #ffeeba; margin-bottom:10px;">
+            ⚠️ <b>Alert:</b> Aapke {len(pending_orders)} orders pending hain!
+        </div>
+        """, unsafe_allow_html=True)
+
     c1, c2 = st.columns(2)
     c1.metric("Total Orders", len(my_orders))
-    c2.metric("Total Spending", f"Rs. {my_orders['Bill'].sum()}")
-    
-    st.subheader("Recent Activity")
+    c2.metric("Total Spent", f"Rs. {my_orders['Bill'].sum()}")
     st.dataframe(my_orders.tail(5), use_container_width=True)
 
 # ========================================================
@@ -247,49 +244,42 @@ elif menu == "📜 History":
     st.dataframe(u_ords[['Date', 'Invoice_ID', 'Product', 'Status']], use_container_width=True)
 
 # ========================================================
-# STEP 15: FEEDBACK SYSTEM (FIXED WIDGET KEY ERROR)
+# STEP 15: FEEDBACK (FIXED: Redirect Without Error)
 # ========================================================
 elif menu == "💬 Feedback":
-    st.subheader("🌟 Share Your Experience")
+    st.subheader("🌟 Share Your Feedback")
     
-    # User Details Display
-    st.markdown(f"""
-    <div style="background: #f8f9fa; padding: 15px; border-radius: 10px; border-left: 5px solid #3b82f6;">
-        <b>Customer:</b> {u_name}<br>
-        <b>Phone:</b> {raw_ph}
-    </div><br>
-    """, unsafe_allow_html=True)
-    
-    # Text area for input
-    # Note: Hum ne value ko direct change karne wala logic hata diya hai
-    f_msg = st.text_area("Write message", placeholder="Apna feedback yahan likhein...", height=150, key="feedback_text")
-    
-    if st.button("Submit Feedback 📩", use_container_width=True):
-        if f_msg.strip(): # Hum direct variable f_msg use kar rahe hain
-            with st.spinner("Saving your feedback..."):
+    # Feedback Form using 'with' to keep it clean
+    with st.form("feedback_form", clear_on_submit=True):
+        f_msg = st.text_area("Message", placeholder="Yahan apna feedback likhein...")
+        submit_btn = st.form_submit_button("Submit Feedback 📩", use_container_width=True)
+        
+        if submit_btn:
+            if f_msg.strip():
                 payload = {
-                    "action": "feedback", 
-                    "name": u_name, 
-                    "phone": raw_ph, 
-                    "message": f_msg, 
-                    "date": datetime.now().strftime('%Y-%m-%d %H:%M')
+                    "action": "feedback", "name": u_name, "phone": raw_ph, 
+                    "message": f_msg, "date": datetime.now().strftime('%Y-%m-%d %H:%M')
                 }
                 
                 try:
                     requests.post(SCRIPT_URL, json=payload)
+                    st.success("✅ Feedback saved successfully!")
                     st.balloons()
-                    st.success("✅ Feedback saved! Redirecting...")
                     
-                    # FIX: Widget key error se bachne ke liye hum state ko 
-                    # modify nahi karenge, sirf menu change karke rerun karenge.
-                    st.session_state.menu_choice = "🏠 Dashboard"
+                    # ERROR FIX: Hum menu_choice ko modify nahi karenge.
+                    # Hum user ko button dikhayenge wapis janay ke liye ya automatic redirection
+                    # ka wait karenge. 
+                    st.info("Redirecting to Dashboard in 2 seconds...")
+                    time.sleep(2)
                     
-                    time.sleep(1)
+                    # Sab se safe tareeqa: Session update ke bajaye Dashboard par 'Force' janay ka:
+                    st.query_params["page"] = "dashboard" # Ye page refresh handle karega
                     st.rerun()
+                    
                 except Exception as e:
                     st.error(f"Error: {e}")
-        else:
-            st.warning("⚠️ Kuch likhna zaroori hai.")
+            else:
+                st.warning("⚠️ Message khali nahi chor sakte.")
 
 # ========================================================
 # STEP 16: UPDATED ADMIN PANEL & DASHBOARD
