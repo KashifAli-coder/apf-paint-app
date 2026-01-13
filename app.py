@@ -99,20 +99,36 @@ if st.sidebar.button("Logout 🚪"):
 menu = st.session_state.menu_choice
 
 # ========================================================
-# STEP 6: SOCIAL MEDIA STYLE PROFILE (Locked Name/Phone)
+# STEP 6: DASHBOARD & PROFILE (REPLACEMENT CODE)
 # ========================================================
+
+# --- DASHBOARD MODULE ---
+if menu == "🏠 Dashboard":
+    st.header("🏠 Dashboard")
+    # Dashboard stats aur orders dikhane ke liye logic
+    u_ords = orders_df[orders_df['Phone'].apply(normalize_ph) == raw_ph]
+    
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Total Orders", len(u_ords))
+    c2.metric("Total Spent", f"Rs. {u_ords['Bill'].sum()}")
+    c3.metric("Status", "Active")
+
+    st.subheader("Recent Activity")
+    st.dataframe(u_ords.tail(5), use_container_width=True)
+
+# --- PROFILE MODULE (Social Media Style) ---
 elif menu == "👤 Profile":
     st.markdown("### 👤 User Profile Settings")
     
-    # User Card UI
+    # Visual Social Media Card
     st.markdown(f"""
-    <div style="background-color: #f8f9fa; padding: 20px; border-radius: 15px; border-left: 5px solid #3b82f6; margin-bottom: 20px;">
+    <div style="background-color: #f8f9fa; padding: 25px; border-radius: 15px; border-left: 6px solid #3b82f6; margin-bottom: 25px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
         <div style="display: flex; align-items: center;">
-            <img src="{sidebar_img}" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; margin-right: 20px; border: 2px solid #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+            <img src="{sidebar_img}" style="width: 90px; height: 90px; border-radius: 50%; object-fit: cover; margin-right: 25px; border: 3px solid #fff; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
             <div>
-                <h2 style="margin: 0; color: #1f2937;">{u_name}</h2>
-                <p style="margin: 0; color: #6b7280;">📱 {raw_ph}</p>
-                <span style="background: #e5e7eb; padding: 2px 8px; border-radius: 10px; font-size: 12px;">Active Member</span>
+                <h2 style="margin: 0; color: #111827; font-family: sans-serif;">{u_name}</h2>
+                <p style="margin: 5px 0; color: #4b5563; font-size: 16px;">📱 {raw_ph}</p>
+                <div style="display: inline-block; background: #dcfce7; color: #166534; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: bold;">Verified Profile</div>
             </div>
         </div>
     </div>
@@ -121,49 +137,39 @@ elif menu == "👤 Profile":
     col1, col2 = st.columns(2)
 
     with col1:
-        st.subheader("🖼️ Change Profile Picture")
-        img_file = st.file_uploader("Upload new photo", type=['png', 'jpg', 'jpeg'], key="prof_img_up")
+        st.subheader("🖼️ Profile Picture")
+        st.write("Update your avatar")
+        img_file = st.file_uploader("Choose image...", type=['png', 'jpg', 'jpeg'], key="p_img_up")
         if img_file:
-            if st.button("Update Photo Now ✨"):
+            if st.button("Update Photo ✨", key="up_photo_btn"):
                 b64 = base64.b64encode(img_file.read()).decode()
                 photo_data = f"data:image/png;base64,{b64}"
-                # API Call to Google Sheet
+                # Google Sheet API Call
                 requests.post(SCRIPT_URL, json={"action":"update_photo", "phone":raw_ph, "photo":photo_data})
                 st.session_state.user_data['Photo'] = photo_data
-                st.success("Profile picture updated!")
+                st.success("Photo Updated!")
                 time.sleep(1)
                 st.rerun()
 
     with col2:
-        st.subheader("🔐 Security Settings")
-        new_pw = st.text_input("New Password", type="password", placeholder="Enter new password", key="new_pass_input")
-        conf_pw = st.text_input("Confirm Password", type="password", placeholder="Repeat password", key="conf_pass_input")
+        st.subheader("🔐 Password & Security")
+        st.write("Keep your account safe")
+        new_pw = st.text_input("New Password", type="password", key="n_pass")
+        conf_pw = st.text_input("Confirm New Password", type="password", key="c_pass")
         
-        if st.button("Change Password 🛡️"):
+        if st.button("Change Password 🛡️", key="up_pass_btn"):
             if new_pw and new_pw == conf_pw:
-                # API Call to Google Sheet
-                response = requests.post(SCRIPT_URL, json={
-                    "action": "update_password", 
-                    "phone": raw_ph, 
-                    "password": new_pw
-                })
-                st.success("Password changed successfully!")
+                # Google Sheet API Call
+                requests.post(SCRIPT_URL, json={"action":"update_password", "phone":raw_ph, "password":new_pw})
+                st.success("Password Updated Successfully!")
             elif new_pw != conf_pw:
                 st.error("Passwords do not match!")
             else:
-                st.warning("Please enter a new password.")
+                st.warning("Please enter a password.")
 
-    # Information Alert (To show why Name/Phone are locked)
-    st.info("ℹ️ **Note:** Name and Phone number are verified by admin and cannot be changed from here. Please contact support for any corrections.")
-
-# ========================================================
-# STEP 6 (Main): DASHBOARD
-# ========================================================
-elif menu == "🏠 Dashboard":
-    st.header("🏠 Dashboard")
-    u_ords = orders_df[orders_df['Phone'].apply(normalize_ph) == raw_ph]
-    st.metric("Total Orders", len(u_ords))
-    st.dataframe(u_ords.tail(5), use_container_width=True)
+    st.divider()
+    st.info("⚠️ **Note:** For security reasons, your Name and Phone Number are locked. Please contact the administrator if you need to update them.")
+    
 
 # ========================================================
 # MODULE: NEW ORDER (Steps 7-13)
