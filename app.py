@@ -78,25 +78,30 @@ if not st.session_state.logged_in:
     st.stop()
 
 # ========================================================
-# STEP 5: SIDEBAR (Line 70 Fix Included)
+# STEP 5: SIDEBAR & NAVIGATION (FIXED LINE 74)
 # ========================================================
-u_data = st.session_state.user_data
+u_data = st.session_state.get('user_data', {})
 u_name = u_data.get('Name', 'User')
-raw_ph = normalize_ph(u_data.get('Phone', '')) # FIXED: Safe access
 u_photo = u_data.get('Photo', '')
+raw_ph = normalize_ph(u_data.get('Phone', '')) # Safe Phone Extraction
 
+# Profile Section
 sidebar_img = u_photo if (u_photo and str(u_photo) != 'nan') else "https://cdn-icons-png.flaticon.com/512/149/149071.png"
 st.sidebar.markdown(f'<div style="text-align:center"><img src="{sidebar_img}" style="width:100px;border-radius:50%"></div>', unsafe_allow_html=True)
 st.sidebar.markdown(f"<h3 style='text-align:center;'>{u_name}</h3>", unsafe_allow_html=True)
 
+# Navigation Buttons
 if st.sidebar.button("🏠 Dashboard"): set_nav("🏠 Dashboard")
 if st.sidebar.button("🛍️ New Order"): set_nav("🛍️ New Order")
 if st.sidebar.button("📜 History"): set_nav("📜 History")
 if st.sidebar.button("💬 Feedback"): set_nav("💬 Feedback")
 
-# Admin Button Logic
-if raw_ph == normalize_ph(JAZZCASH_NO):
-    if st.sidebar.button("🔐 Admin"): set_nav("🔐 Admin")
+# --- LINE 74 FIX START ---
+# Admin access check sirf tab hoga jab raw_ph khali nahi hoga
+if raw_ph and raw_ph == normalize_ph(JAZZCASH_NO):
+    if st.sidebar.button("🔐 Admin"): 
+        set_nav("🔐 Admin")
+# --- LINE 74 FIX END ---
 
 if st.sidebar.button("Logout 🚪"): 
     st.session_state.clear()
