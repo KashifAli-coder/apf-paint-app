@@ -221,14 +221,40 @@ elif menu == "🛍️ New Order":
                 st.session_state.cart = []
                 st.success("Order Placed!"); time.sleep(1); set_nav("🏠 Dashboard")
 
-# --- HISTORY ---
+# --- HISTORY MODULE (Attractive Card Style) ---
 elif menu == "📜 History":
     st.header("📜 Order History")
     u_ords = orders_df[orders_df['Phone'].apply(normalize_ph) == raw_ph]
+    
     if not u_ords.empty:
-        st.dataframe(u_ords, use_container_width=True)
+        # Sort by latest first
+        for _, row in u_ords.iloc[::-1].iterrows():
+            status = str(row['Status'])
+            # Color logic
+            bg_color = "#dcfce7" if "Paid" in status else "#fef3c7"
+            text_color = "#166534" if "Paid" in status else "#92400e"
+            icon = "✅" if "Paid" in status else "⏳"
+
+            st.markdown(f"""
+                <div style="background: white; padding: 20px; border-radius: 15px; margin-bottom: 15 dashed #e5e7eb; box-shadow: 0 4px 6px rgba(0,0,0,0.02); border-left: 6px solid {'#10b981' if 'Paid' in status else '#f59e0b'};">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-size: 14px; font-weight: bold; color: #6b7280;">#{row['Invoice_ID']}</span>
+                        <span style="background: {bg_color}; color: {text_color}; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: bold;">
+                            {icon} {status}
+                        </span>
+                    </div>
+                    <div style="margin-top: 10px;">
+                        <h4 style="margin: 0; color: #111827;">{row['Product']}</h4>
+                        <p style="margin: 5px 0; font-size: 18px; font-weight: bold; color: #3b82f6;">Rs. {row['Bill']}</p>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-top: 10px; border-top: 1px solid #f3f4f6; padding-top: 10px;">
+                        <span style="font-size: 12px; color: #9ca3af;">💳 {row['Payment_Method']}</span>
+                        <span style="font-size: 12px; color: #9ca3af;">📅 {str(row['Timestamp'])[:16]}</span>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
     else:
-        st.info("No history found.")
+        st.info("Abhi tak koi order history mojud nahi hai.")
 
 # --- FEEDBACK ---
 elif menu == "💬 Feedback":
@@ -238,26 +264,59 @@ elif menu == "💬 Feedback":
         requests.post(SCRIPT_URL, json={"action":"feedback", "name":u_name, "phone":raw_ph, "message":f_msg})
         st.success("Sent!"); time.sleep(1); set_nav("🏠 Dashboard")
 
-# --- ADMIN PANEL ---
+# --- ADMIN PANEL (Modern Control Style) ---
 elif menu == "🔐 Admin":
-    st.header("🛡️ Admin Panel")
-    t1, t2, t3 = st.tabs(["Orders", "Approvals", "Feedback Logs"])
+    st.header("🛡️ Administrator Control")
+    t1, t2, t3 = st.tabs(["📦 Orders Management", "👥 User Approvals", "💬 Feedback Logs"])
+    
     with t1:
         if not orders_df.empty:
             for idx, row in orders_df.iterrows():
-                st.write(f"ID: {row['Invoice_ID']} | Status: {row['Status']}")
-                if st.button(f"Mark Paid {idx}"):
-                    requests.post(SCRIPT_URL, json={"action":"mark_paid", "invoice_id":row['Invoice_ID']})
-                    st.rerun()
-        else: st.write("No orders.")
+                with st.container():
+                    col_info, col_btn = st.columns([3, 1])
+                    with col_info:
+                        st.markdown(f"""
+                            <div style="background: #f9fafb; padding: 15px; border-radius: 10px; border: 1px solid #e5e7eb;">
+                                <b>Customer:</b> {row['Name']} ({row['Phone']})<br>
+                                <b>Items:</b> {row['Product']}<br>
+                                <b>Total:</b> Rs. {row['Bill']} | <b>Method:</b> {row['Payment_Method']}<br>
+                                <b>Status:</b> <span style="color: {'green' if 'Paid' in str(row['Status']) else 'red'}">{row['Status']}</span>
+                            </div>
+                        """, unsafe_allow_html=True)
+                    with col_btn:
+                        if "Paid" not in str(row['Status']):
+                            if st.button(f"Mark Paid", key=f"pay_{idx}", use_container_width=True):
+                                requests.post(SCRIPT_URL, json={"action":"mark_paid", "invoice_id":row['Invoice_ID']})
+                                st.success("Updated!")
+                                time.sleep(1)
+                                st.rerun()
+                st.write("") # Spacer
+        else:
+            st.write("No orders to manage.")
+
     with t2:
         p_u = users_df[users_df['Role'].str.lower() == 'pending']
         if not p_u.empty:
             for idx, u in p_u.iterrows():
-                st.write(f"Name: {u['Name']} | Phone: {u['Phone']}")
-                if st.button(f"Approve {idx}"):
+                c_u1, c_u2 = st.columns([3, 1])
+                c_u1.info(f"**Name:** {u['Name']} \n\n **Phone:** {u['Phone']}")
+                if c_u2.button(f"Approve ✅", key=f"app_{idx}", use_container_width=True):
                     requests.post(SCRIPT_URL, json={"action":"approve_user", "phone":normalize_ph(u['Phone'])})
+                    st.success("User Approved!")
+                    time.sleep(1)
                     st.rerun()
-        else: st.write("No pending users.")
+        else:
+            st.success("No pending approvals! All caught up.")
+
     with t3:
-        st.dataframe(feedback_df)
+        st.subheader("Customer Reviews")
+        if not feedback_df.empty:
+            for _, f in feedback_df.iloc[::-1].iterrows():
+                st.markdown(f"""
+                    <div style="background: #ffffff; padding: 15px; border-radius: 10px; border-left: 4px solid #8b5cf6; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                        <div style="font-weight: bold; color: #4b5563;">{f['Name']} <span style="font-weight: normal; font-size: 12px;">({f['Phone']})</span></div>
+                        <div style="margin-top: 5px; color: #1f2937;">"{f['Message']}"</div>
+                    </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.write("No feedback yet.")
