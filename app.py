@@ -101,23 +101,30 @@ else:
         st.session_state.clear(); st.rerun()
 
 # ========================================================
-# NEW DASHBOARD MODULE (With Pending Alert)
+# DASHBOARD MODULE (Adding Pending Order Alert)
 # ========================================================
 if menu == "🏠 Dashboard":
-    st.header(f"Dashboard - Welcome {u_name} ✨")
+    st.header(f"Dashboard - Welcome {u_name}")
+    
+    # Order data filter karna
     my_orders = orders_df[orders_df['Phone'].apply(normalize_ph) == raw_ph]
     
-    # ALERT BOX FOR PENDING ORDERS
-    pending = my_orders[my_orders['Status'].str.contains("Order|Pending", case=False, na=False)]
-    if not pending.empty:
-        st.markdown(f'<div class="alert-box">⚠️ Aapke <b>{len(pending)}</b> orders abhi pending hain.</div>', unsafe_allow_html=True)
-
+    # PENDING ORDER ALERT BOX
+    # Hum check kar rahe hain ke kya koi order 'Pending' ya 'Order' status mein hai
+    pending_list = my_orders[my_orders['Status'].str.contains("Order|Pending", case=False, na=False)]
+    
+    if not pending_list.empty:
+        st.warning(f"⚠️ **Alert:** Aapke {len(pending_list)} order(s) abhi process ho rahe hain.")
+        with st.expander("View Pending Details"):
+            st.table(pending_list[['Date', 'Invoice_ID', 'Bill']])
+    
+    # Summary Metrics
     c1, c2 = st.columns(2)
     c1.metric("Total Orders", len(my_orders))
-    c2.metric("Total Spent", f"Rs. {my_orders['Bill'].sum()}")
+    c2.metric("Total Spending", f"Rs. {my_orders['Bill'].sum()}")
     
-    st.subheader("Recent Status")
-    st.dataframe(my_orders.tail(5)[['Date', 'Product', 'Status']], use_container_width=True)
+    st.subheader("Recent Activity")
+    st.dataframe(my_orders.tail(5), use_container_width=True)
 
 # ========================================================
 # STEP 6: PROFILE (Pehele wala code wapis)
