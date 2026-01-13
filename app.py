@@ -282,6 +282,13 @@ elif menu == "💬 Feedback":
                 st.warning("⚠️ Message khali nahi chor sakte.")
 
 # ========================================================
+# STEP 16: ADMIN
+# ========================================================
+elif menu == "🔐 Admin":
+    st.header("Admin Panel")
+    st.dataframe(feedback_df)
+
+# ========================================================
 # STEP 16: UPDATED ADMIN PANEL & DASHBOARD
 # ========================================================
 elif menu == "🔐 Admin":
