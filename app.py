@@ -8,7 +8,7 @@ from io import BytesIO
 from reportlab.pdfgen import canvas
 
 # ========================================================
-# STEP 1: CONFIGURATION (Module 1)
+# STEP 1: CONFIGURATION
 # ========================================================
 SHEET_ID = "1fIOaGMR3-M_t2dtYYuloFH7rSiFha_HDxfO6qaiEmDk"
 SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwLQRD3dIUkQbNUi-Blo5WvBYqauD6NgMtYXDsC6-H1JLOgKShx8N5-ASHaNOR-QlOQ/exec"
@@ -16,7 +16,7 @@ JAZZCASH_NO = "03005508112"
 EASYPAISA_NO = "03005508112"
 
 # ========================================================
-# STEP 2: DATA LOADING (Module 2)
+# STEP 2: DATA LOADING
 # ========================================================
 @st.cache_data(ttl=0)
 def load_all_data():
@@ -36,7 +36,7 @@ def normalize_ph(n):
     return s
 
 # ========================================================
-# STEP 3: SESSION STATE & NAVIGATION LOGIC
+# STEP 3: SESSION STATE
 # ========================================================
 if 'logged_in' not in st.session_state:
     st.session_state.update({'logged_in': False, 'user_data': {}, 'cart': [], 'menu_choice': "🏠 Dashboard"})
@@ -74,7 +74,7 @@ if not st.session_state.logged_in:
     st.stop()
 
 # ========================================================
-# STEP 5: SIDEBAR (NO RADIO LOCK)
+# STEP 5: SIDEBAR
 # ========================================================
 u_data = st.session_state.user_data
 u_name = u_data.get('Name', 'User')
@@ -82,11 +82,10 @@ raw_ph = normalize_ph(u_data.get('Phone', ''))
 u_photo = u_data.get('Photo', '')
 
 sidebar_img = u_photo if (u_photo and str(u_photo) != 'nan') else "https://cdn-icons-png.flaticon.com/512/149/149071.png"
-st.sidebar.markdown(f'<img src="{sidebar_img}" class="profile-img">', unsafe_allow_html=True)
-st.sidebar.markdown(f"<h3 style='text-align:center;'>{u_name}</h3>", unsafe_allow_html=True)
+st.sidebar.markdown(f'<img src="{sidebar_img}" style="width:100px;border-radius:50%">', unsafe_allow_html=True)
+st.sidebar.header(u_name)
 
 if st.sidebar.button("🏠 Dashboard"): set_nav("🏠 Dashboard")
-if st.sidebar.button("👤 Profile"): set_nav("👤 Profile")
 if st.sidebar.button("🛍️ New Order"): set_nav("🛍️ New Order")
 if st.sidebar.button("📜 History"): set_nav("📜 History")
 if st.sidebar.button("💬 Feedback"): set_nav("💬 Feedback")
@@ -106,9 +105,10 @@ if menu == "🏠 Dashboard":
     st.dataframe(u_ords.tail(5), use_container_width=True)
 
 # ========================================================
-# STEP 7: PRODUCT SELECTION (Module 7)
+# MODULE: NEW ORDER (STEPS 7-13)
 # ========================================================
-if menu == "🛍️ New Order":
+elif menu == "🛍️ New Order":
+    # --- STEP 7: Product Selection ---
     st.header("Step 7: Select Product")
     scat = st.selectbox("Category", settings_df['Category'].unique())
     items = settings_df[settings_df['Category'] == scat]
@@ -120,9 +120,7 @@ if menu == "🛍️ New Order":
         st.session_state.cart.append({"Product": sprod, "Qty": qty, "Price": prc, "Total": prc * qty})
         st.rerun()
 
-# ========================================================
-# STEP 8: CART REVIEW (Module 8)
-# ========================================================
+    # --- STEP 8: Cart Review ---
     st.divider()
     st.header("Step 8: Cart Review")
     if not st.session_state.cart:
@@ -130,41 +128,32 @@ if menu == "🛍️ New Order":
     else:
         for i, itm in enumerate(st.session_state.cart):
             st.write(f"{itm['Qty']}x {itm['Product']} = Rs. {itm['Total']}")
-            if st.button(f"Remove {i}", key=f"del_{i}"):
+            if st.button(f"Remove Item {i}", key=f"del_{i}"):
                 st.session_state.cart.pop(i)
                 st.rerun()
 
-# ========================================================
-# STEP 9: BILL CALCULATION (Module 9)
-# ========================================================
-    st.divider()
-    st.header("Step 9: Bill Total")
-    final_bill = sum(x['Total'] for x in st.session_state.cart)
-    st.subheader(f"Total: Rs. {final_bill}")
+        # --- STEP 9: Bill Calculation ---
+        st.divider()
+        st.header("Step 9: Bill Total")
+        final_bill = sum(x['Total'] for x in st.session_state.cart)
+        st.subheader(f"Total: Rs. {final_bill}")
 
-# ========================================================
-# STEP 10: PAYMENT METHOD (Module 10)
-# ========================================================
-    st.divider()
-    st.header("Step 10: Select Payment")
-    pay_type = st.radio("Method", ["COD", "JazzCash", "EasyPaisa"])
+        # --- STEP 10: Payment Method ---
+        st.divider()
+        st.header("Step 10: Select Payment")
+        pay_type = st.radio("Method", ["COD", "JazzCash", "EasyPaisa"])
 
-# ========================================================
-# STEP 11: QR DISPLAY (Module 11)
-# ========================================================
-    st.divider()
-    st.header("Step 11: QR Payment (If Applicable)")
-    if pay_type != "COD":
-        st.write(f"Send to: {JAZZCASH_NO}")
-        st.image(f"https://api.qrserver.com/v1/create-qr-code/?size=150x150&data={final_bill}")
+        # --- STEP 11: QR Display ---
+        st.divider()
+        st.header("Step 11: QR Payment")
+        if pay_type != "COD":
+            st.write(f"Send to: {JAZZCASH_NO}")
+            st.image(f"https://api.qrserver.com/v1/create-qr-code/?size=150x150&data={final_bill}")
 
-# ========================================================
-# STEP 12: ORDER CONFIRMATION (Module 12)
-# ========================================================
-    st.divider()
-    st.header("Step 12: Final Confirmation")
-    if st.button("Confirm & Order Now ✅"):
-        if st.session_state.cart:
+        # --- STEP 12: Final Confirmation ---
+        st.divider()
+        st.header("Step 12: Final Confirmation")
+        if st.button("Confirm & Order Now ✅"):
             inv = f"INV-{int(time.time())}"
             prods = ", ".join([f"{x['Qty']}x {x['Product']}" for x in st.session_state.cart])
             requests.post(SCRIPT_URL, json={"action":"order", "invoice_id":inv, "name":u_name, "phone":raw_ph, "product":prods, "bill":final_bill, "payment_method":pay_type})
@@ -172,33 +161,46 @@ if menu == "🛍️ New Order":
             st.success("Order Placed!")
             time.sleep(1)
             set_nav("🏠 Dashboard")
-        else:
-            st.error("Cart is empty!")
+
+        # --- STEP 13: WhatsApp Link ---
+        st.divider()
+        st.header("Step 13: Support")
+        st.markdown(f"[Message Support](https://wa.me/923005508112?text=OrderDetails)")
 
 # ========================================================
-# STEP 13: WHATSAPP LINK (Module 13)
+# STEP 14: HISTORY
 # ========================================================
-    st.divider()
-    st.header("Step 13: Support")
-    st.markdown(f"[Message Support](https://wa.me/923005508112?text=OrderDetails)")
+elif menu == "📜 History":
+    st.header("📜 History")
+    st.dataframe(orders_df[orders_df['Phone'].apply(normalize_ph) == raw_ph], use_container_width=True)
 
 # ========================================================
-# STEP 16: ADMIN PANEL (FULL & COMPLETE)
+# STEP 15: FEEDBACK
+# ========================================================
+elif menu == "💬 Feedback":
+    st.header("💬 Feedback")
+    f_msg = st.text_area("Message")
+    if st.button("Submit Feedback"):
+        requests.post(SCRIPT_URL, json={"action":"feedback", "name":u_name, "phone":raw_ph, "message":f_msg})
+        st.success("Sent!"); time.sleep(1); set_nav("🏠 Dashboard")
+
+# ========================================================
+# STEP 16: ADMIN PANEL (FIXED)
 # ========================================================
 elif menu == "🔐 Admin":
-    st.header("Step 16: Admin Control Panel")
-    ad_tabs = st.tabs(["Manage Orders", "User Approvals", "Feedback Logs"])
+    st.header("🛡️ Admin Panel")
+    ad_tabs = st.tabs(["Orders", "Approvals", "Feedback"])
     
-    with ad_tabs[0]: # Orders Module
+    with ad_tabs[0]:
         st.subheader("All Orders")
         for idx, row in orders_df.iterrows():
-            st.write(f"ID: {row['Invoice_ID']} | {row['Name']} | {row['Status']}")
+            st.write(f"ID: {row['Invoice_ID']} | Status: {row['Status']}")
             if st.button(f"Mark Paid {idx}", key=f"paid_{idx}"):
                 requests.post(SCRIPT_URL, json={"action":"mark_paid", "invoice_id":row['Invoice_ID']})
                 st.rerun()
 
-    with ad_tabs[1]: # Approval Module
-        st.subheader("Pending Users")
+    with ad_tabs[1]:
+        st.subheader("Approvals")
         pending_u = users_df[users_df['Role'].str.lower() == 'pending']
         for idx, u in pending_u.iterrows():
             st.write(f"{u['Name']} ({u['Phone']})")
@@ -206,7 +208,5 @@ elif menu == "🔐 Admin":
                 requests.post(SCRIPT_URL, json={"action":"approve_user", "phone":normalize_ph(u['Phone'])})
                 st.rerun()
 
-    with ad_tabs[2]: # Feedback Module
+    with ad_tabs[2]:
         st.dataframe(feedback_df)
-
-# (Dashboard, History, Feedback modules wahi rahenge...)
