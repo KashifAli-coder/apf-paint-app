@@ -2,175 +2,357 @@ import streamlit as st
 import pandas as pd
 import requests
 import time
+import base64
 from datetime import datetime
 
 # ========================================================
-# 1. CORE CONFIGURATION & STATE
+# STEP 1: CONFIGURATION & SETUP
 # ========================================================
 SHEET_ID = "1fIOaGMR3-M_t2dtYYuloFH7rSiFha_HDxfO6qaiEmDk"
 SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxnAPNsjMMdi9NZ1_TSv6O7XS-SAx2dXnOCNJr-WE0Z4eeY9xfurGg3zUMhWJbTvSCf/exec"
-ADMIN_PH = "03005508112"
+JAZZCASH_NO = "03005508112"
+EASYPAISA_NO = "03005508112"
 
-# Navigation Controller (Ensures Tabs don't disappear)
-if 'page' not in st.session_state: st.session_state.page = "🏠 Dashboard"
-if 'auth' not in st.session_state: st.session_state.auth = False
-if 'user' not in st.session_state: st.session_state.user = {}
-if 'app_name' not in st.session_state: st.session_state.app_name = "Paint Pro Store"
+st.set_page_config(page_title="Paint Pro Factory Store", layout="wide", initial_sidebar_state="expanded")
 
-def nav_to(page_name):
-    st.session_state.page = page_name
-    st.rerun()
-
-st.set_page_config(page_title=st.session_state.app_name, layout="wide")
-
-# ========================================================
-# 2. ROBUST CSS (Guaranteed Clickable Cards)
-# ========================================================
-st.markdown(f"""
+# --- ORIGINAL PROFESSIONAL CSS ---
+st.markdown("""
     <style>
-    .stApp {{ background-color: #f8fafc; }}
+    .stApp { background-color: #f8fafc; }
+    .stButton>button { border-radius: 8px; font-weight: 600; transition: all 0.3s; }
+    [data-testid="stSidebar"] { background-color: #ffffff; border-right: 1px solid #e2e8f0; }
     
-    /* Card Container with Relative Positioning */
-    .card-box {{
-        position: relative;
-        padding: 40px 20px;
-        border-radius: 25px;
-        text-align: center;
-        color: white;
-        min-height: 200px;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-        transition: 0.4s ease-in-out;
-        z-index: 1;
-    }}
-    .card-box:hover {{ transform: translateY(-10px); filter: brightness(1.1); }}
+    /* Dashboard & Metric Cards */
+    .metric-card {
+        background: linear-gradient(135deg, #1e40af, #3b82f6);
+        color: white; padding: 25px; border-radius: 16px; text-align: center;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+    .metric-card-green {
+        background: linear-gradient(135deg, #065f46, #10b981);
+        color: white; padding: 25px; border-radius: 16px; text-align: center;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+    .metric-card-orange {
+        background: linear-gradient(135deg, #9a3412, #f97316);
+        color: white; padding: 25px; border-radius: 16px; text-align: center;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
     
-    .blue-g {{ background: linear-gradient(135deg, #1e3a8a, #3b82f6); }}
-    .gold-g {{ background: linear-gradient(135deg, #b45309, #fbbf24); }}
-    .green-g {{ background: linear-gradient(135deg, #065f46, #10b981); }}
-    .purple-g {{ background: linear-gradient(135deg, #5b21b6, #a78bfa); }}
-
-    /* This CSS finds the Streamlit Button inside the card and expands it to cover the WHOLE card */
-    div[data-testid="stVerticalBlock"] > div:has(button) {{
-        position: relative;
-    }}
+    /* Custom Rows */
+    .activity-row {
+        background: white; padding: 18px; border-radius: 12px; margin-bottom: 12px;
+        border: 1px solid #e2e8f0; display: flex; justify-content: space-between;
+        align-items: center; transition: 0.2s;
+    }
+    .activity-row:hover { border-color: #3b82f6; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
     
-    .stButton>button {{
-        position: absolute !important;
-        top: -210px !important; /* Adjust based on card height */
-        left: 0 !important;
-        width: 100% !important;
-        height: 200px !important;
-        background: transparent !important;
-        color: transparent !important;
-        border: none !important;
-        z-index: 10 !important;
-        cursor: pointer !important;
-    }}
-    
-    .stButton>button:hover {{ background: transparent !important; color: transparent !important; border: none !important; }}
+    /* Profile Section */
+    .profile-header {
+        text-align: center; padding: 30px; background: white; 
+        border-radius: 20px; border: 1px solid #e2e8f0; margin-bottom: 20px;
+    }
     </style>
 """, unsafe_allow_html=True)
 
 # ========================================================
-# 3. DATABASE ENGINE
+# STEP 2: CORE FUNCTIONS
 # ========================================================
-@st.cache_data(ttl=2)
-def get_data():
+@st.cache_data(ttl=5) # Reduced TTL for faster sync
+def load_all_data():
     try:
         t = int(time.time())
-        url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&t={t}&sheet="
-        return pd.read_csv(url+"Users").fillna(''), pd.read_csv(url+"Orders").fillna(''), pd.read_csv(url+"Settings").fillna('')
-    except: return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+        base = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&t={t}&sheet="
+        u = pd.read_csv(base + "Users").fillna('')
+        s = pd.read_csv(base + "Settings").fillna('')
+        o = pd.read_csv(base + "Orders").fillna('')
+        f = pd.read_csv(base + "Feedback").fillna('')
+        return u, s, o, f
+    except Exception as e:
+        st.error(f"Data Connection Error: {e}")
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-u_db, o_db, s_db = get_data()
+users_df, settings_df, orders_df, feedback_df = load_all_data()
 
-# Login Check
-if not st.session_state.auth:
-    _, login_col, _ = st.columns([1, 1.5, 1])
-    with login_col:
-        st.title(st.session_state.app_name)
-        l_ph = st.text_input("Mobile No")
-        l_pw = st.text_input("Password", type="password")
-        if st.button("Login"):
-            # Simple clean phone check
-            target = '0' + str(l_ph).strip().split('.')[0] if not str(l_ph).startswith('0') else str(l_ph)
-            match = u_db[(u_db['Phone'].astype(str).str.contains(target)) & (u_db['Password'].astype(str) == l_pw)]
-            if not match.empty:
-                st.session_state.auth = True
-                st.session_state.user = match.iloc[0].to_dict()
-                st.rerun()
+def normalize_ph(n):
+    s = str(n).strip().split('.')[0]
+    return '0' + s if s and not s.startswith('0') else s
+
+def get_next_invoice(df):
+    try:
+        if df.empty or 'Invoice_ID' not in df.columns: return "0001"
+        valid_ids = pd.to_numeric(df['Invoice_ID'], errors='coerce').dropna()
+        return f"{int(valid_ids.max()) + 1:04d}" if not valid_ids.empty else "0001"
+    except: return "0001"
+
+# ========================================================
+# STEP 3: SESSION STATE MANAGEMENT
+# ========================================================
+states = {
+    'logged_in': False, 'user_data': {}, 'menu_choice': "🏠 Dashboard",
+    'wizard_step': 1, 'temp_order': {}, 'show_wizard': False,
+    'cart_items': []
+}
+for key, val in states.items():
+    if key not in st.session_state: st.session_state[key] = val
+
+def set_nav(target):
+    st.session_state.menu_choice = target
+    st.rerun()
+
+# ========================================================
+# STEP 4: AUTHENTICATION (LOGIN / REGISTER)
+# ========================================================
+if not st.session_state.logged_in:
+    c1, c2, c3 = st.columns([1, 2, 1])
+    with c2:
+        st.markdown("<h1 style='text-align: center; color: #1e40af;'>🎨 Paint Factory Store</h1>", unsafe_allow_html=True)
+        tab_l, tab_r = st.tabs(["🔐 Secure Login", "📝 New Registration"])
+        
+        with tab_l:
+            l_ph = st.text_input("Registered Phone")
+            l_pw = st.text_input("Password", type="password")
+            if st.button("Login to Dashboard 🚀", use_container_width=True):
+                u_ph = normalize_ph(l_ph)
+                match = users_df[(users_df['Phone'].apply(normalize_ph) == u_ph) & (users_df['Password'].astype(str) == l_pw)]
+                if not match.empty:
+                    row = match.iloc[0]
+                    if str(row['Role']).lower() == 'pending':
+                        st.warning("Approval Pending. Please contact Admin.")
+                    else:
+                        st.session_state.logged_in = True
+                        st.session_state.user_data = row.to_dict()
+                        st.rerun()
+                else: st.error("Incorrect details provided.")
+
+        with tab_r:
+            r_name = st.text_input("Full Name")
+            r_ph = st.text_input("Mobile Number")
+            r_pw = st.text_input("Create Password", type="password")
+            if st.button("Register Now ✨", use_container_width=True):
+                if r_name and r_ph and r_pw:
+                    requests.post(SCRIPT_URL, json={"action":"register", "name":r_name, "phone":normalize_ph(r_ph), "password":r_pw})
+                    st.success("Registration sent for approval!")
+                else: st.error("Please fill all fields.")
     st.stop()
 
-# Identity
-u_ph = st.session_state.user.get('Phone', '')
-is_admin = (str(u_ph).strip() == ADMIN_PH or "03005508112" in str(u_ph))
+# ========================================================
+# STEP 5: SIDEBAR NAVIGATION
+# ========================================================
+u_data = st.session_state.user_data
+u_name = u_data.get('Name', 'User')
+u_phone = normalize_ph(u_data.get('Phone', ''))
+u_photo = u_data.get('Photo', "https://cdn-icons-png.flaticon.com/512/149/149071.png")
 
-# Sidebar Navigation (Will never disappear)
 with st.sidebar:
-    st.header(st.session_state.user.get('Name'))
+    st.markdown(f'''
+        <div style="text-align:center; padding: 20px;">
+            <img src="{u_photo}" style="width:110px; height:110px; border-radius:50%; object-fit:cover; border:3px solid #3b82f6;">
+            <h3 style="margin-top:10px;">{u_name}</h3>
+            <span style="background:#dcfce7; color:#166534; padding:2px 10px; border-radius:15px; font-size:12px;">Verified Member</span>
+        </div>
+    ''', unsafe_allow_html=True)
+    
     st.divider()
-    if st.button("🏠 Dashboard", use_container_width=True): nav_to("🏠 Dashboard")
-    if st.button("🛒 New Order", use_container_width=True, type="primary"): nav_to("🛒 New Order")
-    if st.button("📜 History", use_container_width=True): nav_to("📜 History")
-    if is_admin:
+    if st.button("🏠 Dashboard", use_container_width=True): set_nav("🏠 Dashboard")
+    if st.button("🛍️ Book New Order", use_container_width=True, type="primary"): 
+        st.session_state.show_wizard = True
+        st.session_state.wizard_step = 1
+        st.rerun()
+    if st.button("📜 Order History", use_container_width=True): set_nav("📜 History")
+    if st.button("👤 My Profile", use_container_width=True): set_nav("👤 Profile")
+    if st.button("💬 Send Feedback", use_container_width=True): set_nav("💬 Feedback")
+    
+    if u_phone == normalize_ph(JAZZCASH_NO):
         st.divider()
-        st.write("ADMIN ONLY")
-        if st.button("🔐 Admin Panel", use_container_width=True): nav_to("🔐 Admin")
+        if st.button("🔐 Admin Control", use_container_width=True): set_nav("🔐 Admin")
+        
     st.divider()
-    if st.button("Logout"): st.session_state.clear(); st.rerun()
+    if st.button("Logout 🚪", use_container_width=True):
+        st.session_state.clear(); st.rerun()
 
-# Dashboard Logic
-if st.session_state.page == "🏠 Dashboard":
-    st.subheader(f"Welcome to {st.session_state.app_name}")
-    my_orders = o_db[o_db['Phone'].astype(str).str.contains(str(u_ph))]
-    
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        st.markdown(f'<div class="card-box blue-g"><small>MY ORDERS</small><h1>{len(my_orders)}</h1></div>', unsafe_allow_html=True)
-        if st.button("View Orders", key="card_1"): nav_to("📜 History")
-    
-    with c2:
-        st.markdown(f'<div class="card-box gold-g"><small>PENDING</small><h1>{len(my_orders[my_orders["Status"]=="Pending"])}</h1></div>', unsafe_allow_html=True)
-        if is_admin:
-            if st.button("View Pending", key="card_2"): nav_to("🔐 Admin")
-        else: st.button("N/A", key="card_2_u", disabled=True)
+# ========================================================
+# STEP 6: NEXT/BACK POPUP WIZARD (DETAILED)
+# ========================================================
+if st.session_state.show_wizard:
+    @st.dialog("🛒 Order Booking Wizard")
+    def order_wizard_detailed():
+        step = st.session_state.wizard_step
+        cols_prog = st.columns(4)
+        for i in range(4):
+            cols_prog[i].markdown(f"**Step {i+1}**" if step == i+1 else f"<span style='color:gray;'>Step {i+1}</span>", unsafe_allow_html=True)
+        st.progress(step / 4)
+
+        if step == 1:
+            st.subheader("Select Product Type")
+            cats = list(settings_df['Category'].unique()) if not settings_df.empty else []
+            scat = st.selectbox("Product Category", cats)
+            prods = list(settings_df[settings_df['Category'] == scat]['Product Name'].unique()) if scat else []
+            sprod = st.selectbox("Specific Product", prods)
             
-    with c3:
-        st.markdown(f'<div class="card-box green-g"><small>COMPLETED</small><h1>{len(my_orders[my_orders["Status"]=="Paid"])}</h1></div>', unsafe_allow_html=True)
-        if is_admin:
-            if st.button("View Paid", key="card_3"): nav_to("🔐 Admin")
-        else: st.button("N/A", key="card_3_u", disabled=True)
+            if st.button("Continue to Details ➡️", use_container_width=True):
+                if sprod:
+                    st.session_state.temp_order.update({"cat": scat, "prod": sprod})
+                    st.session_state.wizard_step = 2
+                    st.rerun()
 
-    if is_admin:
-        with c4:
-            st.markdown(f'<div class="card-box purple-g"><small>MEMBERS</small><h1>{len(u_db)}</h1></div>', unsafe_allow_html=True)
-            if st.button("View Users", key="card_4"): nav_to("🔐 Admin")
+        elif step == 2:
+            st.subheader("Shade & Packing")
+            prod_name = st.session_state.temp_order.get('prod')
+            p_data = settings_df[settings_df['Product Name'] == prod_name].iloc[0]
+            
+            colors = [c.split(':')[0] for c in str(p_data['Colors']).split(',') if c.strip()]
+            shade = st.selectbox("Select Your Shade", colors)
+            
+            packs = [p for p in ["20kg", "Gallon", "Quarter"] if float(p_data.get(f"Price_{p}", 0)) > 0]
+            size = st.radio("Select Packing Size", packs, horizontal=True)
+            qty = st.number_input("Enter Quantity", 1, 1000, 1)
+            
+            u_price = float(p_data.get(f"Price_{size}", 0))
+            st.markdown(f"**Unit Rate:** Rs. {u_price} | **Total:** Rs. {u_price * qty}")
+            
+            c1, c2 = st.columns(2)
+            if c1.button("⬅️ Change Product"): st.session_state.wizard_step = 1; st.rerun()
+            if c2.button("Next: Payment ➡️"):
+                st.session_state.temp_order.update({"shade": shade, "size": size, "qty": qty, "price": u_price, "total": u_price * qty})
+                st.session_state.wizard_step = 3
+                st.rerun()
 
-            # 5-Step Order Wizard
-if st.session_state.page == "🛒 New Order":
-    st.header("Place New Order")
-    # Step logic integrated here...
-    step = st.selectbox("Step", [1, 2, 3, 4, 5], index=0) # Simple step for demo, can be state-based
-    st.info(f"Booking Process: Step {step}")
-    if st.button("Back to Dashboard"): nav_to("🏠 Dashboard")
+        elif step == 3:
+            st.subheader("Payment Information")
+            pmode = st.selectbox("Payment Method", ["Cash on Delivery (COD)", "JazzCash", "EasyPaisa"])
+            receipt_b64 = ""
+            if "COD" not in pmode:
+                st.info(f"Please transfer amount to: {JAZZCASH_NO}")
+                up_file = st.file_uploader("Upload Transaction Screenshot", type=['jpg','png','jpeg'])
+                if up_file: receipt_b64 = f"data:image/png;base64,{base64.b64encode(up_file.read()).decode()}"
+            
+            c1, c2 = st.columns(2)
+            if c1.button("⬅️ Back"): st.session_state.wizard_step = 2; st.rerun()
+            if c2.button("Review Order 🔍"):
+                if "COD" not in pmode and not receipt_b64: st.error("Please upload receipt.")
+                else:
+                    st.session_state.temp_order.update({"method": pmode, "receipt": receipt_b64})
+                    st.session_state.wizard_step = 4
+                    st.rerun()
 
-# Admin Panel with Fixed Tabs
-elif st.session_state.page == "🔐 Admin" and is_admin:
-    st.header("Master Admin")
-    t1, t2, t3 = st.tabs(["🛒 Orders", "👥 Users", "⚙️ Settings"])
+        elif step == 4:
+            st.subheader("Final Order Confirmation")
+            ord_sum = st.session_state.temp_order
+            st.markdown(f"""
+                <div style="background:#f1f5f9; padding:15px; border-radius:10px; border-left:4px solid #1e40af;">
+                <b>Product:</b> {ord_sum['prod']} ({ord_sum['size']})<br>
+                <b>Shade:</b> {ord_sum['shade']}<br>
+                <b>Quantity:</b> {ord_sum['qty']}<br>
+                <hr>
+                <b>Total Bill: Rs. {ord_sum['total']}</b><br>
+                <b>Payment:</b> {ord_sum['method']}
+                </div>
+            """, unsafe_allow_html=True)
+            
+            c1, c2 = st.columns(2)
+            if c1.button("⬅️ Back to Payment"): st.session_state.wizard_step = 3; st.rerun()
+            if c2.button("Confirm & Place Order ✅", type="primary"):
+                with st.spinner("Processing..."):
+                    inv = get_next_invoice(orders_df)
+                    p_desc = f"{ord_sum['qty']}x {ord_sum['prod']} ({ord_sum['size']}) Shade: {ord_sum['shade']}"
+                    res = requests.post(SCRIPT_URL, json={
+                        "action":"order", "invoice_id":inv, "name":u_name, "phone":u_phone, 
+                        "product":p_desc, "bill":ord_sum['total'], "payment_method":ord_sum['method'], "receipt": ord_sum['receipt']
+                    })
+                    if res.status_code == 200:
+                        st.session_state.show_wizard = False
+                        st.success("Order Placed Successfully!"); time.sleep(1.5); set_nav("🏠 Dashboard")
+                    else: st.error("Server Error. Try again.")
+
+    order_wizard_detailed()
+
+# ========================================================
+# STEP 7: MAIN MODULES (ORIGINAL DESIGNS)
+# ========================================================
+menu = st.session_state.menu_choice
+
+if menu == "🏠 Dashboard":
+    st.markdown(f"## 🏠 Welcome back, {u_name}")
+    u_orders = orders_df[orders_df['Phone'].apply(normalize_ph) == u_phone]
+    total_val = u_orders['Bill'].sum() if not u_orders.empty else 0
+    
+    # ORIGINAL CARDS
+    st.markdown(f"""
+        <div style="display: flex; gap: 20px; margin-bottom: 30px;">
+            <div class="metric-card">
+                <small>MY ORDERS</small><br><span style="font-size:32px; font-weight:bold;">{len(u_orders)}</span>
+            </div>
+            <div class="metric-card-green">
+                <small>TOTAL SPENT</small><br><span style="font-size:32px; font-weight:bold;">Rs. {total_val}</span>
+            </div>
+            <div class="metric-card-orange">
+                <small>ACCOUNT</small><br><span style="font-size:24px; font-weight:bold;">ACTIVE</span>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+
+    st.subheader("🆕 Recent Orders")
+    if not u_orders.empty:
+        for _, r in u_orders.tail(5).iloc[::-1].iterrows():
+            st.markdown(f'''
+                <div class="activity-row">
+                    <div><b>{r["Product"]}</b><br><small>{r["Timestamp"]}</small></div>
+                    <div style="text-align:right;"><b>Rs. {r["Bill"]}</b><br><span style="color:#2563eb;">{r["Status"]}</span></div>
+                </div>
+            ''', unsafe_allow_html=True)
+    else: st.info("You haven't placed any orders yet.")
+
+elif menu == "📜 History":
+    st.header("📜 My Complete Order History")
+    u_orders = orders_df[orders_df['Phone'].apply(normalize_ph) == u_phone]
+    if u_orders.empty: st.info("No history found.")
+    else:
+        st.dataframe(u_orders.iloc[::-1], use_container_width=True, hide_index=True)
+
+elif menu == "👤 Profile":
+    st.header("👤 Personal Profile")
+    # ORIGINAL CENTERED DESIGN
+    st.markdown(f'''
+        <div class="profile-header">
+            <img src="{u_photo}" style="width:160px; height:160px; border-radius:50%; object-fit:cover; border:5px solid #3b82f6; margin-bottom:15px;">
+            <h2>{u_name}</h2>
+            <p style="color:gray;">Phone: {u_phone}</p>
+        </div>
+    ''', unsafe_allow_html=True)
+    
+    with st.expander("Edit Profile Details"):
+        new_photo = st.file_uploader("Upload New Profile Picture", type=['jpg','png'])
+        if st.button("Save Changes"):
+            if new_photo:
+                b64_img = f"data:image/png;base64,{base64.b64encode(new_photo.read()).decode()}"
+                requests.post(SCRIPT_URL, json={"action":"update_photo", "phone":u_phone, "photo":b64_img})
+                st.success("Profile Updated!"); time.sleep(1); st.rerun()
+
+elif menu == "🔐 Admin":
+    st.header("🛡️ Factory Management Panel")
+    t1, t2, t3 = st.tabs(["🛒 All Orders", "👥 User Approvals", "📊 Statistics"])
     
     with t1:
-        st.dataframe(o_db.iloc[::-1], use_container_width=True)
+        st.subheader("Manage Customer Orders")
+        for idx, row in orders_df.iloc[::-1].iterrows():
+            with st.expander(f"Order #{row['Invoice_ID']} - {row['Name']}"):
+                st.write(f"Items: {row['Product']}")
+                st.write(f"Payment: {row['Payment_Method']}")
+                if 'Receipt' in row and row['Receipt'] and str(row['Receipt']).startswith("data:image"):
+                    st.image(row['Receipt'], width=300)
+                if st.button("Mark as Paid & Dispatched ✅", key=f"paid_{idx}"):
+                    requests.post(SCRIPT_URL, json={"action":"mark_paid", "invoice_id":row['Invoice_ID']})
+                    st.success("Status Updated!"); st.rerun()
+
     with t2:
-        st.dataframe(u_db, use_container_width=True)
-    with t3:
-        st.session_state.app_name = st.text_input("Change App Name", st.session_state.app_name)
-        if st.button("Save Settings"): st.success("Updated!"); st.rerun()
+        st.subheader("Manage Users")
+        st.dataframe(users_df, use_container_width=True)
 
-elif st.session_state.page == "📜 History":
-    st.header("Order History")
-    st.dataframe(o_db[o_db['Phone'].astype(str).str.contains(str(u_ph))].iloc[::-1], use_container_width=True)
-
+elif menu == "💬 Feedback":
+    st.header("💬 Customer Feedback")
+    txt = st.text_area("How was your experience?")
+    if st.button("Submit Review"):
+        if txt:
+            requests.post(SCRIPT_URL, json={"action":"feedback", "name":u_name, "phone":u_phone, "message":txt})
+            st.success("Thank you for your feedback!"); time.sleep(1); set_nav("🏠 Dashboard")
