@@ -6,368 +6,425 @@ import base64
 from datetime import datetime
 
 # ========================================================
-# 1. SYSTEM CONFIGURATION & DATABASE
+# 1. DATABASE & SYSTEM INITIALIZATION
 # ========================================================
 SHEET_ID = "1fIOaGMR3-M_t2dtYYuloFH7rSiFha_HDxfO6qaiEmDk"
 SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxnAPNsjMMdi9NZ1_TSv6O7XS-SAx2dXnOCNJr-WE0Z4eeY9xfurGg3zUMhWJbTvSCf/exec"
 ADMIN_PH = "03005508112"
 
-# Default UI Settings (Admin Panel se change hon gi)
-if 'app_settings' not in st.session_state:
-    st.session_state.app_settings = {
-        "name": "Paint Pro Store",
+# Initializing Master App Settings in Session State
+if 'app_master' not in st.session_state:
+    st.session_state.app_master = {
+        "app_name": "Paint Pro Store",
+        "admin_email": "admin@paintpro.com",
+        "admin_no": "03005508112",
         "jc_no": "03005508112",
         "ep_no": "03005508112",
-        "footer": "© 2026 Paint Pro Store | All Rights Reserved",
-        "header_color": "#1e3a8a"
+        "footer_text": "© 2026 Paint Pro Store | All Rights Reserved",
+        "terms": "1. All orders are subject to approval. 2. Payments must be verified via screenshot."
     }
 
-st.set_page_config(page_title=st.session_state.app_settings["name"], layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(
+    page_title=st.session_state.app_master["app_name"], 
+    layout="wide", 
+    initial_sidebar_state="expanded"
+)
 
 # ========================================================
-# 2. ADVANCED CSS (Clickable Cards & Invisible Buttons)
+# 2. ADVANCED UI CUSTOMIZATION (CSS)
 # ========================================================
 st.markdown(f"""
     <style>
-    .stApp {{ background-color: #f8fafc; }}
+    .stApp {{ background-color: #f0f2f6; }}
     
-    /* Master Card Styling */
+    /* Clickable Card Container */
     .metric-card-wrapper {{
         position: relative;
-        margin-bottom: 20px;
+        margin-bottom: 25px;
+        transition: 0.3s;
     }}
-    .m-card {{
-        padding: 30px; border-radius: 25px; text-align: center; color: white;
-        box-shadow: 0 10px 25px rgba(0,0,0,0.1); transition: 0.4s ease;
-        min-height: 180px; display: flex; flex-direction: column; justify-content: center;
-    }}
-    .m-card:hover {{ transform: translateY(-8px); filter: brightness(1.1); box-shadow: 0 15px 35px rgba(0,0,0,0.2); }}
     
-    .c-total {{ background: linear-gradient(135deg, #1e3a8a, #3b82f6); }}
-    .c-pending {{ background: linear-gradient(135deg, #f59e0b, #fbbf24); }}
-    .c-complete {{ background: linear-gradient(135deg, #059669, #10b981); }}
-    .c-active {{ background: linear-gradient(135deg, #7c3aed, #a78bfa); }}
+    .m-card {{
+        padding: 40px 20px; border-radius: 25px; text-align: center; color: white;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.1); 
+        min-height: 200px; display: flex; flex-direction: column; justify-content: center;
+        border: 2px solid rgba(255,255,255,0.1);
+    }}
+    .m-card:hover {{ transform: translateY(-10px); filter: brightness(1.1); box-shadow: 0 20px 40px rgba(0,0,0,0.2); }}
+    
+    .c-total {{ background: linear-gradient(135deg, #0f172a, #334155); }}
+    .c-pending {{ background: linear-gradient(135deg, #b45309, #f59e0b); }}
+    .c-complete {{ background: linear-gradient(135deg, #065f46, #10b981); }}
+    .c-active {{ background: linear-gradient(135deg, #5b21b6, #8b5cf6); }}
 
-    /* Invisible Button Overlay */
+    /* Invisible Overlay Button - This makes the whole card clickable */
     .stButton>button {{
-        width: 100%; height: 180px; background: transparent !important;
+        width: 100%; height: 200px; background: transparent !important;
         color: transparent !important; border: none !important;
         position: absolute; top: 0; left: 0; z-index: 10; cursor: pointer;
     }}
     .stButton>button:hover {{ background: transparent !important; color: transparent !important; border: none !important; }}
     .stButton>button:active {{ background: transparent !important; border: none !important; }}
 
-    /* Order Rows */
+    /* Order Row Design */
     .order-row {{
-        background: white; padding: 20px; border-radius: 18px; margin-bottom: 12px;
-        border-left: 6px solid {st.session_state.app_settings["header_color"]}; 
-        display: flex; justify-content: space-between; align-items: center;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.03);
-    }
+        background: white; padding: 25px; border-radius: 20px; margin-bottom: 15px;
+        border-left: 8px solid #3b82f6; display: flex; justify-content: space-between;
+        align-items: center; box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }}
     
     .footer-box {{
-        text-align: center; padding: 50px; color: #94a3b8; font-size: 14px;
-        border-top: 1px solid #e2e8f0; margin-top: 60px;
+        text-align: center; padding: 50px; color: #64748b; font-size: 14px;
+        border-top: 1px solid #cbd5e1; margin-top: 100px;
     }}
     </style>
 """, unsafe_allow_html=True)
 
 # ========================================================
-# 3. CORE DATA ENGINE
+# 3. DATA PROCESSING ENGINE
 # ========================================================
 @st.cache_data(ttl=2)
-def load_full_database():
+def fetch_complete_data():
     try:
         ts = int(time.time())
-        url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&t={ts}&sheet="
-        u = pd.read_csv(url + "Users").fillna('')
-        s = pd.read_csv(url + "Settings").fillna('')
-        o = pd.read_csv(url + "Orders").fillna('')
-        f = pd.read_csv(url + "Feedback").fillna('')
+        base_url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&t={ts}&sheet="
+        u = pd.read_csv(base_url + "Users").fillna('')
+        s = pd.read_csv(base_url + "Settings").fillna('')
+        o = pd.read_csv(base_url + "Orders").fillna('')
+        f = pd.read_csv(base_url + "Feedback").fillna('')
         return u, s, o, f
     except Exception as e:
-        st.error(f"Database Error: {e}")
+        st.error(f"Sync Error: {e}")
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-users_db, settings_db, orders_db, feedback_db = load_full_database()
+users_db, settings_db, orders_db, feedback_db = fetch_complete_data()
 
-def clean_phone(p):
+def format_phone(p):
     s = str(p).strip().split('.')[0]
     return '0' + s if s and not s.startswith('0') else s
 
-def get_new_inv(df):
+def generate_invoice_id(df):
     if df.empty or 'Invoice_ID' not in df.columns: return "0001"
     try:
-        m = pd.to_numeric(df['Invoice_ID'], errors='coerce').max()
-        return f"{int(m) + 1:04d}" if not pd.isna(m) else "0001"
+        max_id = pd.to_numeric(df['Invoice_ID'], errors='coerce').max()
+        return f"{int(max_id) + 1:04d}" if not pd.isna(max_id) else "0001"
     except: return "0001"
 
 # ========================================================
-# 4. SESSION CONTROLLER
+# 4. SESSION & NAVIGATION CONTROL
 # ========================================================
 if 'auth' not in st.session_state: st.session_state.auth = False
 if 'user' not in st.session_state: st.session_state.user = {}
-if 'page' not in st.session_state: st.session_state.page = "🏠 Dashboard"
-if 'wizard' not in st.session_state: st.session_state.wizard = False
-if 'step' not in st.session_state: st.session_state.step = 1
-if 'buf' not in st.session_state: st.session_state.buf = {}
-if 'admin_sub_tab' not in st.session_state: st.session_state.admin_sub_tab = 0
+if 'current_screen' not in st.session_state: st.session_state.current_screen = "🏠 Dashboard"
+if 'wizard_open' not in st.session_state: st.session_state.wizard_open = False
+if 'wizard_step' not in st.session_state: st.session_state.wizard_step = 1
+if 'order_data' not in st.session_state: st.session_state.order_data = {}
+if 'admin_target_tab' not in st.session_state: st.session_state.admin_target_tab = 0
 
-def nav(page_name, tab_idx=0):
-    st.session_state.page = page_name
-    st.session_state.admin_sub_tab = tab_idx
+def navigate_to(screen, tab_idx=0):
+    st.session_state.current_screen = screen
+    st.session_state.admin_target_tab = tab_idx
     st.rerun()
 
 # ========================================================
 # 5. AUTHENTICATION MODULE
 # ========================================================
 if not st.session_state.auth:
-    _, center, _ = st.columns([1, 2, 1])
-    with center:
-        st.markdown(f"<h1 style='text-align:center;'>🎨 {st.session_state.app_settings['name']}</h1>", unsafe_allow_html=True)
-        t_l, t_r = st.tabs(["🔐 Secure Login", "📝 Member Registration"])
+    _, col_auth, _ = st.columns([1, 2, 1])
+    with col_auth:
+        st.markdown(f"<h1 style='text-align:center;'>{st.session_state.app_master['app_name']}</h1>", unsafe_allow_html=True)
+        tab_login, tab_reg = st.tabs(["🔐 Secure Login", "📝 New Registration"])
         
-        with t_l:
-            l_ph = st.text_input("Mobile No", key="l_ph")
-            l_pw = st.text_input("Password", type="password", key="l_pw")
-            if st.button("Enter Factory Portal 🚀", use_container_width=True):
-                target_ph = clean_phone(l_ph)
-                match = users_db[(users_db['Phone'].apply(clean_phone) == target_ph) & (users_db['Password'].astype(str) == l_pw)]
+        with tab_login:
+            login_ph = st.text_input("Mobile Number")
+            login_pw = st.text_input("Access Password", type="password")
+            if st.button("Unlock Dashboard 🚀", use_container_width=True):
+                clean_ph = format_phone(login_ph)
+                match = users_db[(users_db['Phone'].apply(format_phone) == clean_ph) & (users_db['Password'].astype(str) == login_pw)]
                 if not match.empty:
                     st.session_state.auth = True
                     st.session_state.user = match.iloc[0].to_dict()
                     st.rerun()
-                else: st.error("❌ Phone or Password incorrect.")
+                else: st.error("❌ Invalid Login Credentials.")
         
-        with t_r:
-            st.info("Direct registration for new customers.")
-            r_n = st.text_input("Full Name")
-            r_p = st.text_input("Mobile Number")
-            r_w = st.text_input("Set Password", type="password")
-            if st.button("Register Now ✨", use_container_width=True):
-                if r_n and r_p and r_w:
-                    requests.post(SCRIPT_URL, json={"action":"register", "name":r_n, "phone":clean_phone(r_p), "password":r_w})
-                    st.success("✅ Application Sent!")
+        with tab_reg:
+            st.info("Please provide authentic information for factory verification.")
+            reg_name = st.text_input("Full Registered Name")
+            reg_ph = st.text_input("Active Mobile Number")
+            reg_pw = st.text_input("Create Strong Password", type="password")
+            if st.button("Submit Application ✨", use_container_width=True):
+                if reg_name and reg_ph and reg_pw:
+                    requests.post(SCRIPT_URL, json={"action":"register", "name":reg_name, "phone":format_phone(reg_ph), "password":reg_pw})
+                    st.success("✅ Application sent for approval! Contact Admin.")
     st.stop()
 
 # ========================================================
 # 6. SIDEBAR & IDENTITY
 # ========================================================
-curr_u = st.session_state.user
-u_name, u_phone = curr_u.get('Name', 'User'), clean_phone(curr_u.get('Phone', ''))
-is_admin = (u_phone == clean_phone(ADMIN_PH))
+user_info = st.session_state.user
+u_name = user_info.get('Name', 'User')
+u_phone = format_phone(user_info.get('Phone', ''))
+is_admin_user = (u_phone == format_phone(ADMIN_PH))
 
 with st.sidebar:
     st.markdown(f'''
-        <div style="text-align:center; padding: 20px;">
-            <img src="{curr_u.get('Photo','https://cdn-icons-png.flaticon.com/512/149/149071.png')}" style="width:120px; border-radius:50%; border:4px solid #3b82f6;">
-            <h2 style="margin-top:10px;">{u_name}</h2>
-            <p style="color:#64748b;">{'⭐ FACTORY ADMIN' if is_admin else 'C-MEMBER'}</p>
+        <div style="text-align:center; padding: 25px;">
+            <img src="{user_info.get('Photo','https://cdn-icons-png.flaticon.com/512/149/149071.png')}" style="width:130px; height:130px; border-radius:50%; border:5px solid #3b82f6; object-fit: cover;">
+            <h2 style="margin-top:15px; color:#1e293b;">{u_name}</h2>
+            <span style="background:#dbeafe; color:#1e40af; padding:4px 12px; border-radius:20px; font-weight:600; font-size:12px;">{'ADMINISTRATOR' if is_admin_user else 'VALUED MEMBER'}</span>
         </div>
     ''', unsafe_allow_html=True)
     st.divider()
-    if st.button("🏠 Factory Dashboard", use_container_width=True): nav("🏠 Dashboard")
-    if st.button("🛍️ Create New Order", use_container_width=True, type="primary"):
-        st.session_state.wizard = True
-        st.session_state.step = 1
+    if st.button("🏠 Home Dashboard", use_container_width=True): navigate_to("🏠 Dashboard")
+    if st.button("🛍️ Book New Order", use_container_width=True, type="primary"):
+        st.session_state.wizard_open = True
+        st.session_state.wizard_step = 1
         st.rerun()
-    if st.button("📜 My Order History", use_container_width=True): nav("📜 History")
-    if st.button("👤 Profile & Safety", use_container_width=True): nav("👤 Profile")
-    if st.button("💬 Feedback", use_container_width=True): nav("💬 Feedback")
+    if st.button("📜 Transaction History", use_container_width=True): navigate_to("📜 History")
+    if st.button("👤 My Profile", use_container_width=True): navigate_to("👤 Profile")
     
-    if is_admin:
+    if is_admin_user:
         st.divider()
-        st.write("🛠️ **MASTER CONTROLS**")
-        if st.button("🔐 Master Admin Panel", use_container_width=True): nav("🔐 Admin")
+        st.markdown("🛠️ **MASTER CONTROL PANEL**")
+        if st.button("🔐 Manager Dashboard", use_container_width=True): navigate_to("🔐 Admin")
     
     st.divider()
-    if st.button("Log Out 🚪", use_container_width=True):
+    if st.button("Logout 🚪", use_container_width=True):
         st.session_state.clear(); st.rerun()
 
 # ========================================================
-# 7. CLICKABLE DASHBOARD CARDS
+# 7. DASHBOARD MODULE (CLICKABLE CARDS)
 # ========================================================
-if st.session_state.page == "🏠 Dashboard":
-    st.markdown(f"## 🏭 {st.session_state.app_settings['name']} Overview")
-    user_orders = orders_db[orders_db['Phone'].apply(clean_phone) == u_phone]
+if st.session_state.current_screen == "🏠 Dashboard":
+    st.header(f"Welcome back, {u_name}!")
+    personal_orders = orders_db[orders_db['Phone'].apply(format_phone) == u_phone]
     
-    # Logic for metrics
-    t_my = len(user_orders)
-    p_my = len(user_orders[user_orders['Status'].str.contains('Pending|Process', case=False)])
-    c_my = len(user_orders[user_orders['Status'].str.contains('Paid|Complete', case=False)])
-    all_users_count = len(users_db)
+    # Calculation for Cards
+    count_total = len(personal_orders)
+    count_pending = len(personal_orders[personal_orders['Status'].str.contains('Pending|Process', case=False)])
+    count_paid = len(personal_orders[personal_orders['Status'].str.contains('Paid|Complete', case=False)])
+    count_members = len(users_db)
 
-    # UI Design for Clickable Cards
-    col1, col2, col3, col4 = st.columns(4)
+    # Clickable Cards Grid
+    c1, c2, c3, c4 = st.columns(4)
     
-    with col1:
-        st.markdown(f'<div class="metric-card-wrapper"><div class="m-card c-total"><small>MY TOTAL</small><h3>{t_my}</h3></div></div>', unsafe_allow_html=True)
-        if st.button("", key="c_total"): nav("📜 History")
+    with c1:
+        st.markdown(f'<div class="metric-card-wrapper"><div class="m-card c-total"><small>TOTAL BOOKINGS</small><h3>{count_total}</h3></div></div>', unsafe_allow_html=True)
+        if st.button("", key="btn_card_total"): navigate_to("📜 History")
     
-    with col2:
-        st.markdown(f'<div class="metric-card-wrapper"><div class="m-card c-pending"><small>PENDING</small><h3>{p_my}</h3></div></div>', unsafe_allow_html=True)
-        if is_admin:
-            if st.button("", key="c_pending"): nav("🔐 Admin", 0)
-        else: st.button("", key="c_pending_u", disabled=True)
+    with c2:
+        st.markdown(f'<div class="metric-card-wrapper"><div class="m-card c-pending"><small>PENDING APPROVAL</small><h3>{count_pending}</h3></div></div>', unsafe_allow_html=True)
+        if is_admin_user:
+            if st.button("", key="btn_card_pending"): navigate_to("🔐 Admin", 0) # Tab 0 is Orders
+        else:
+            if st.button("", key="btn_card_pending_u"): navigate_to("📜 History")
             
-    with col3:
-        st.markdown(f'<div class="metric-card-wrapper"><div class="m-card c-complete"><small>COMPLETED</small><h3>{c_my}</h3></div></div>', unsafe_allow_html=True)
-        if is_admin:
-            if st.button("", key="c_complete"): nav("🔐 Admin", 0)
-        else: st.button("", key="c_complete_u", disabled=True)
+    with c3:
+        st.markdown(f'<div class="metric-card-wrapper"><div class="m-card c-complete"><small>PAID & COMPLETED</small><h3>{count_paid}</h3></div></div>', unsafe_allow_html=True)
+        if is_admin_user:
+            if st.button("", key="btn_card_paid"): navigate_to("🔐 Admin", 0)
+        else:
+            if st.button("", key="btn_card_paid_u"): navigate_to("📜 History")
 
-    if is_admin:
-        with col4:
-            st.markdown(f'<div class="metric-card-wrapper"><div class="m-card c-active"><small>STORE MEMBERS</small><h3>{all_users_count}</h3></div></div>', unsafe_allow_html=True)
-            if st.button("", key="c_active"): nav("🔐 Admin", 1)
+    # This card only appears for Admin
+    if is_admin_user:
+        with c4:
+            st.markdown(f'<div class="metric-card-wrapper"><div class="m-card c-active"><small>STORE MEMBERS</small><h3>{count_members}</h3></div></div>', unsafe_allow_html=True)
+            if st.button("", key="btn_card_members"): navigate_to("🔐 Admin", 1) # Tab 1 is Users
 
+    st.divider()
     st.subheader("🕒 Recent Transactions")
-    if not user_orders.empty:
-        for _, r in user_orders.tail(5).iloc[::-1].iterrows():
+    if not personal_orders.empty:
+        for _, row in personal_orders.tail(5).iloc[::-1].iterrows():
             st.markdown(f'''
                 <div class="order-row">
-                    <div><b>{r["Product"]}</b><br><small>{r["Timestamp"]}</small></div>
-                    <div style="text-align:right;"><b>Rs. {r["Bill"]}</b><br><span style="color:#2563eb;">{r["Status"]}</span></div>
+                    <div><b>{row["Product"]}</b><br><small>{row["Timestamp"]}</small></div>
+                    <div style="text-align:right;">
+                        <span style="font-size:18px; font-weight:700;">Rs. {row["Bill"]}</span><br>
+                        <span style="color:#2563eb; background:#eff6ff; padding:2px 8px; border-radius:10px; font-size:12px;">{row["Status"]}</span>
+                    </div>
                 </div>
             ''', unsafe_allow_html=True)
-    else: st.info("Abhi tak koi order record nahi hai.")
+    else:
+        st.info("No recent activity found. Start by placing an order!")
 
 # ========================================================
-# 8. THE ORDER WIZARD (Phase 1-5)
+# 8. THE COMPLETE ORDER WIZARD (Phase 1-5)
 # ========================================================
-if st.session_state.wizard:
-    @st.dialog("🛒 Order Booking Gateway")
-    def run_full_wizard():
-        step = st.session_state.step
+if st.session_state.wizard_open:
+    @st.dialog("🛒 Professional Booking Gateway")
+    def open_booking_wizard():
+        step = st.session_state.wizard_step
         st.progress(step/5)
-        st.write(f"Step {step} of 5")
+        st.write(f"Section {step} of 5")
         
         if step == 1:
             st.subheader("Select Category & Product")
-            cats = settings_db['Category'].unique()
-            s_cat = st.selectbox("Category", cats)
-            prods = settings_db[settings_db['Category']==s_cat]['Product Name'].unique()
-            s_prod = st.selectbox("Product Name", prods)
-            if st.button("Next: Choose Size ➡️"):
-                st.session_state.buf.update({"p": s_prod})
-                st.session_state.step = 2; st.rerun()
+            all_cats = settings_db['Category'].unique()
+            s_cat = st.selectbox("Market Category", all_cats)
+            available_prods = settings_db[settings_db['Category']==s_cat]['Product Name'].unique()
+            s_prod = st.selectbox("Select Product", available_prods)
+            if st.button("Continue to Details ➡️", use_container_width=True):
+                st.session_state.order_data.update({"prod": s_prod})
+                st.session_state.wizard_step = 2; st.rerun()
                 
         elif step == 2:
-            st.subheader("Specifications")
-            p_rec = settings_db[settings_db['Product Name'] == st.session_state.buf['p']].iloc[0]
-            sz = st.radio("Select Packing", ["20kg", "Gallon", "Quarter"], horizontal=True)
-            qty = st.number_input("Enter Quantity", 1, 5000, 1)
-            price = float(p_rec.get(f"Price_{sz}", 0))
-            total = price * qty
-            st.info(f"💰 Total Amount to Pay: Rs. {total}")
-            if st.button("Next: Payment Method ➡️"):
-                st.session_state.buf.update({"sz":sz, "qty":qty, "total":total})
-                st.session_state.step = 3; st.rerun()
+            st.subheader("Specifications & Pricing")
+            prod_info = settings_db[settings_db['Product Name'] == st.session_state.order_data['prod']].iloc[0]
+            size_choice = st.radio("Choose Packing Size", ["20kg", "Gallon", "Quarter"], horizontal=True)
+            quantity = st.number_input("Order Quantity", 1, 1000, 1)
+            unit_price = float(prod_info.get(f"Price_{size_choice}", 0))
+            total_bill = unit_price * quantity
+            
+            st.markdown(f"""
+                <div style="background:#f8fafc; padding:20px; border-radius:15px; border:1px solid #e2e8f0;">
+                    <p>Unit Price: Rs. {unit_price}</p>
+                    <h2 style="color:#1e40af;">Total Bill: Rs. {total_bill}</h2>
+                </div>
+            """, unsafe_allow_html=True)
+            
+            if st.button("Proceed to Payment ➡️", use_container_width=True):
+                st.session_state.order_data.update({"size":size_choice, "qty":quantity, "bill":total_bill})
+                st.session_state.wizard_step = 3; st.rerun()
 
         elif step == 3:
-            st.subheader("Select Payment Method")
-            met = st.radio("Choose Method", ["JazzCash", "EasyPaisa", "COD"])
-            st.warning("Digital payment ke liye PIN flash message tab hi aayega jab aap payment verify karenge.")
-            if st.button("Proceed to Pay ➡️"):
-                st.session_state.buf['met'] = met
-                st.session_state.step = 4 if met != "COD" else 5; st.rerun()
+            st.subheader("Select Payment Gateway")
+            pay_method = st.radio("Choose Method", ["JazzCash", "EasyPaisa", "Cash on Delivery (COD)"])
+            st.warning("Note: Online payments require screenshot verification in the next step.")
+            if st.button("Confirm Method ➡️", use_container_width=True):
+                st.session_state.order_data['method'] = pay_method
+                st.session_state.wizard_step = 4 if "COD" not in pay_method else 5
+                st.rerun()
 
         elif step == 4:
-            st.subheader("Final Verification")
-            met = st.session_state.buf['met']
-            num = st.session_state.app_settings['jc_no'] if met == "JazzCash" else st.session_state.app_settings['ep_no']
-            qr = f"https://api.qrserver.com/v1/create-qr-code/?size=250x250&data={num}"
+            st.subheader("Digital Payment Verification")
+            method = st.session_state.order_data['method']
+            target_no = st.session_state.app_master['jc_no'] if "Jazz" in method else st.session_state.app_master['ep_no']
+            qr_link = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={target_no}"
+            
             st.markdown(f'''
-                <div style="text-align:center; background:white; padding:20px; border-radius:20px; border:2px dashed #3b82f6;">
-                    <img src="{qr}" width="160"><br>
-                    <b>Account Number: {num}</b><br>
-                    <h2>Amount: Rs. {st.session_state.buf['total']}</h2>
+                <div style="text-align:center; padding:20px; border:2px dashed #3b82f6; border-radius:20px;">
+                    <img src="{qr_link}" width="180"><br>
+                    <p style="margin-top:10px;">Send <b>Rs. {st.session_state.order_data['bill']}</b> to:</p>
+                    <h1 style="color:#1e40af;">{target_no}</h1>
+                    <small>Scan QR or transfer manually to verify.</small>
                 </div>
             ''', unsafe_allow_html=True)
-            proof = st.file_uploader("Upload Transaction Screenshot (Proof)", type=['jpg','png','jpeg'])
-            if proof and st.button("Verify & Submit ✅"):
-                st.session_state.step = 5; st.rerun()
+            
+            proof_img = st.file_uploader("Upload Transaction Screenshot", type=['jpg', 'jpeg', 'png'])
+            if proof_img and st.button("Submit Proof for Approval ✅", use_container_width=True):
+                st.session_state.wizard_step = 5; st.rerun()
 
         elif step == 5:
-            st.subheader("Review Order Details")
-            d = st.session_state.buf
-            st.write(f"Product: {d['p']} ({d['sz']})")
-            st.write(f"Total Bill: Rs. {d['total']}")
-            st.write(f"Method: {d['met']}")
-            if st.button("Final Submission 🚀", type="primary", use_container_width=True):
-                inv = get_new_inv(orders_db)
+            st.subheader("Final Review")
+            order_summary = st.session_state.order_data
+            st.write(f"**Item:** {order_summary['qty']}x {order_summary['prod']} ({order_summary['size']})")
+            st.write(f"**Total Payable:** Rs. {order_summary['bill']}")
+            st.write(f"**Payment Via:** {order_summary['method']}")
+            
+            if st.button("Place Final Order 🚀", type="primary", use_container_width=True):
+                new_inv = generate_invoice_id(orders_db)
                 requests.post(SCRIPT_URL, json={
-                    "action":"order", "invoice_id":inv, "name":u_name, "phone":u_phone,
-                    "product": f"{d['qty']}x {d['p']} ({d['sz']})", "bill":d['total'], "payment_method":d['met']
+                    "action": "order", 
+                    "invoice_id": new_inv, 
+                    "name": u_name, 
+                    "phone": u_phone,
+                    "product": f"{order_summary['qty']}x {order_summary['prod']} ({order_summary['size']})",
+                    "bill": order_summary['bill'], 
+                    "payment_method": order_summary['method']
                 })
-                st.session_state.wizard = False; st.balloons(); st.rerun()
-    run_full_wizard()
+                st.session_state.wizard_open = False
+                st.balloons()
+                st.rerun()
+    open_booking_wizard()
 
 # ========================================================
-# 9. ADMIN PANEL (With All Tabs)
+# 9. ADMIN PANEL (FULL MASTER CONTROL)
 # ========================================================
-elif st.session_state.page == "🔐 Admin" and is_admin:
-    st.header("🛡️ Factory Control Center")
-    a_t1, a_t2, a_t3, a_t4 = st.tabs(["🛒 Orders", "👥 Members", "⚙️ App Master Settings", "💬 Feedback"])
+elif st.session_state.current_screen == "🔐 Admin" and is_admin_user:
+    st.header("🛡️ Master Control Dashboard")
     
-    with a_t1:
-        st.subheader("Manage All System Orders")
-        for idx, r in orders_db.iloc[::-1].iterrows():
-            with st.expander(f"Order #{r['Invoice_ID']} - {r['Name']} ({r['Status']})"):
-                st.write(f"**Item:** {r['Product']}")
-                st.write(f"**Bill:** Rs. {r['Bill']} | **Method:** {r['Payment_Method']}")
-                if r['Status'] != "Paid":
-                    if st.button("Verify & Mark Paid ✅", key=f"pay_adm_{idx}"):
-                        requests.post(SCRIPT_URL, json={"action":"mark_paid", "invoice_id":r['Invoice_ID']})
-                        st.success("Order Approved!"); time.sleep(1); st.rerun()
+    # Selecting tab based on clickable card logic
+    admin_tab1, admin_tab2, admin_tab3 = st.tabs(["🛒 Orders Management", "👥 User Database", "⚙️ Master App Settings"])
+    
+    with admin_tab1:
+        st.subheader("All System Bookings")
+        status_filter = st.selectbox("Filter by Status", ["All", "Pending", "Paid", "Complete"])
+        
+        filtered_orders = orders_db
+        if status_filter != "All":
+            filtered_orders = orders_db[orders_db['Status'] == status_filter]
+            
+        for idx, row in filtered_orders.iloc[::-1].iterrows():
+            with st.expander(f"Order #{row['Invoice_ID']} - {row['Name']} ({row['Status']})"):
+                st.write(f"**Customer Phone:** {row['Phone']}")
+                st.write(f"**Items:** {row['Product']}")
+                st.write(f"**Amount:** Rs. {row['Bill']} | **Gateway:** {row['Payment_Method']}")
+                st.write(f"**Timestamp:** {row['Timestamp']}")
+                
+                if row['Status'] != "Paid":
+                    if st.button("Approve & Mark as Paid ✅", key=f"approve_btn_{idx}"):
+                        requests.post(SCRIPT_URL, json={"action":"mark_paid", "invoice_id":row['Invoice_ID']})
+                        st.success("Order status updated successfully!"); time.sleep(1); st.rerun()
 
-    with a_t2:
-        st.subheader("Registered Users Database")
+    with admin_tab2:
+        st.subheader("Member Directory")
         st.dataframe(users_db, use_container_width=True, hide_index=True)
-        
-    with a_t3:
-        st.subheader("🚀 Global App Configuration")
-        st.write("In settings se poori app ka look aur numbers badal jayen ge.")
-        n_name = st.text_input("Application Name", st.session_state.app_settings['name'])
-        n_jc = st.text_input("JazzCash Merchant No", st.session_state.app_settings['jc_no'])
-        n_ep = st.text_input("EasyPaisa Merchant No", st.session_state.app_settings['ep_no'])
-        n_footer = st.text_area("Footer Text", st.session_state.app_settings['footer'])
-        
-        if st.button("Apply Global Changes 💾"):
-            st.session_state.app_settings.update({"name": n_name, "jc_no": n_jc, "ep_no": n_ep, "footer": n_footer})
-            st.success("App Settings Updated Locally!"); st.rerun()
+        if st.button("Download User List (CSV)"):
+            csv = users_db.to_csv(index=False).encode('utf-8')
+            st.download_button("Click to Download", csv, "users.csv", "text/csv")
 
-    with a_t4:
-        st.subheader("User Feedbacks")
-        st.dataframe(feedback_db, use_container_width=True)
+    with admin_tab3:
+        st.subheader("🚀 System Global Settings")
+        st.warning("Editing these will update the app for all users instantly.")
+        
+        m_name = st.text_input("Application Name", st.session_state.app_master['app_name'])
+        m_jc = st.text_input("Master JazzCash No", st.session_state.app_master['jc_no'])
+        m_ep = st.text_input("Master EasyPaisa No", st.session_state.app_master['ep_no'])
+        m_email = st.text_input("Admin Support Email", st.session_state.app_master['admin_email'])
+        m_footer = st.text_area("Footer Copyright Text", st.session_state.app_master['footer_text'])
+        m_terms = st.text_area("Terms & Conditions", st.session_state.app_master['terms'])
+        
+        if st.button("Apply Global Changes 💾", type="primary"):
+            st.session_state.app_master.update({
+                "app_name": m_name, "jc_no": m_jc, "ep_no": m_ep,
+                "admin_email": m_email, "footer_text": m_footer, "terms": m_terms
+            })
+            st.success("Global Settings Updated Successfully!"); time.sleep(1); st.rerun()
 
 # ========================================================
-# 10. HISTORY, PROFILE & FOOTER
+# 10. HISTORY & PROFILE MODULES
 # ========================================================
-elif st.session_state.page == "📜 History":
-    st.header("📜 Order History")
-    h = orders_db[orders_db['Phone'].apply(clean_phone) == u_phone]
-    st.dataframe(h.iloc[::-1], use_container_width=True, hide_index=True)
+elif st.session_state.current_screen == "📜 History":
+    st.header("📜 My Order History")
+    hist_data = orders_db[orders_db['Phone'].apply(format_phone) == u_phone]
+    if not hist_data.empty:
+        st.dataframe(hist_data.iloc[::-1], use_container_width=True, hide_index=True)
+    else:
+        st.info("You haven't placed any orders yet.")
 
-elif st.session_state.page == "👤 Profile":
-    st.header("👤 Account Management")
-    c1, c2 = st.columns([1, 2])
-    with c1: st.image(curr_u.get('Photo','https://cdn-icons-png.flaticon.com/512/149/149071.png'), width=180)
-    with c2:
-        st.write(f"**User Name:** {u_name}")
-        st.write(f"**User Phone:** {u_phone}")
-        with st.expander("Security: Update Password"):
-            new_p = st.text_input("New Password", type="password")
-            if st.button("Update Now"):
-                requests.post(SCRIPT_URL, json={"action":"update_password", "phone":u_phone, "password":new_p})
-                st.success("Done!"); time.sleep(1); st.rerun()
+elif st.session_state.current_screen == "👤 Profile":
+    st.header("👤 Account Settings")
+    prof_col1, prof_col2 = st.columns([1, 2])
+    with prof_col1:
+        st.image(user_info.get('Photo','https://cdn-icons-png.flaticon.com/512/149/149071.png'), width=200)
+    with prof_col2:
+        st.write(f"**Full Name:** {u_name}")
+        st.write(f"**Phone Number:** {u_phone}")
+        st.write(f"**Account Status:** Active")
+        
+        with st.expander("Update Security Password"):
+            new_pass = st.text_input("New Password", type="password")
+            if st.button("Change Password Now"):
+                requests.post(SCRIPT_URL, json={"action":"update_password", "phone":u_phone, "password":new_pass})
+                st.success("Password Updated!"); time.sleep(1); st.rerun()
 
-elif st.session_state.page == "💬 Feedback":
-    st.header("💬 Feedback")
-    f_msg = st.text_area("Hamein batayein hum apni service kaise behtar kar saktay hain?")
-    if st.button("Send Feedback"):
-        requests.post(SCRIPT_URL, json={"action":"feedback", "name":u_name, "phone":u_phone, "message":f_msg})
-        st.success("Thank you for your feedback!"); time.sleep(1); nav("🏠 Dashboard")
-
-# FOOTER
-st.markdown(f'<div class="footer-box">{st.session_state.app_settings["footer"]}</div>', unsafe_allow_html=True)
+# ========================================================
+# 11. GLOBAL FOOTER
+# ========================================================
+st.markdown(f'''
+    <div class="footer-box">
+        {st.session_state.app_master["footer_text"]}<br>
+        Support: {st.session_state.app_master["admin_email"]} | WhatsApp: {st.session_state.app_master["admin_no"]}
+    </div>
+''', unsafe_allow_html=True)
