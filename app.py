@@ -8,7 +8,6 @@ from datetime import datetime
 # ========================================================
 # 1. DATABASE & API CONFIGURATION
 # ========================================================
-# In settings ko tabdeel na karein
 SHEET_ID = "1fIOaGMR3-M_t2dtYYuloFH7rSiFha_HDxfO6qaiEmDk"
 SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxnAPNsjMMdi9NZ1_TSv6O7XS-SAx2dXnOCNJr-WE0Z4eeY9xfurGg3zUMhWJbTvSCf/exec"
 JAZZCASH_NO = "03005508112"
@@ -28,48 +27,35 @@ st.markdown("""
     /* Main Background */
     .stApp { background-color: #f4f7f9; }
     
+    /* Dashboard Metric Cards */
+    .metric-container { display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 25px; }
+    .m-card {
+        flex: 1; min-width: 200px; padding: 25px; border-radius: 20px; text-align: center; color: white;
+        box-shadow: 0 10px 20px rgba(0,0,0,0.05); transition: 0.3s;
+    }
+    .m-card:hover { transform: translateY(-5px); }
+    .c-total { background: linear-gradient(135deg, #1e3a8a, #3b82f6); }
+    .c-pending { background: linear-gradient(135deg, #f59e0b, #fbbf24); }
+    .c-complete { background: linear-gradient(135deg, #059669, #10b981); }
+    .c-active { background: linear-gradient(135deg, #7c3aed, #a78bfa); }
+    
     /* Buttons Styling */
     .stButton>button {
-        border-radius: 12px;
-        font-weight: 700;
-        height: 3.2em;
-        transition: all 0.4s ease;
-        border: none;
-    }
-    .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
-    
-    /* Sidebar Navigation */
-    [data-testid="stSidebar"] { background-color: #ffffff; border-right: 1px solid #e2e8f0; }
-    
-    /* Dashboard Metric Cards */
-    .card-blue {
-        background: linear-gradient(135deg, #1e3a8a, #3b82f6);
-        color: white; padding: 30px; border-radius: 20px; text-align: center;
-        box-shadow: 0 10px 20px rgba(30, 58, 138, 0.2);
-    }
-    .card-green {
-        background: linear-gradient(135deg, #064e3b, #10b981);
-        color: white; padding: 30px; border-radius: 20px; text-align: center;
-        box-shadow: 0 10px 20px rgba(6, 78, 59, 0.2);
-    }
-    
-    /* QR Box Styling */
-    .qr-container {
-        text-align: center; background: #ffffff; padding: 25px;
-        border: 3px dashed #3b82f6; border-radius: 25px; margin: 20px 0;
+        border-radius: 12px; font-weight: 700; height: 3.2em;
+        transition: all 0.4s ease; border: none;
     }
     
     /* Activity Rows */
     .order-row {
         background: white; padding: 22px; border-radius: 18px; margin-bottom: 15px;
-        border: 1px solid #edf2f7; display: flex; justify-content: space-between;
+        border-left: 6px solid #3b82f6; display: flex; justify-content: space-between;
         align-items: center; box-shadow: 0 4px 6px rgba(0,0,0,0.02);
     }
     
-    /* Profile Section */
-    .profile-card {
-        text-align: center; background: white; padding: 50px;
-        border-radius: 30px; border: 1px solid #e2e8f0; margin-bottom: 30px;
+    /* QR Box Styling */
+    .qr-container {
+        text-align: center; background: #ffffff; padding: 25px;
+        border: 2px solid #e2e8f0; border-radius: 25px; margin: 10px 0;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -125,7 +111,7 @@ def change_screen(new_screen):
 if not st.session_state.auth_status:
     col_left, col_mid, col_right = st.columns([1, 2, 1])
     with col_mid:
-        st.markdown("<h1 style='text-align: center; color: #1e3a8a;'>🎨 Paint Factory Portal</h1>", unsafe_allow_html=True)
+        st.markdown("<h1 style='text-align: center; color: #1e3a8a;'>🎨 Paint Pro Portal</h1>", unsafe_allow_html=True)
         login_tab, signup_tab = st.tabs(["🔐 Secure Login", "📝 New Registration"])
         
         with login_tab:
@@ -185,10 +171,10 @@ with st.sidebar:
         st.session_state.clear(); st.rerun()
 
 # ========================================================
-# 7. MULTI-STEP ORDER WIZARD (QR + NUMBER)
+# 7. REAL LOOK ORDER WIZARD (With Verification)
 # ========================================================
 if st.session_state.order_wizard_active:
-    @st.dialog("🛒 Order Booking Wizard")
+    @st.dialog("🛒 Secure Order Booking")
     def run_order_wizard():
         step = st.session_state.step_number
         st.progress(step / 5)
@@ -226,8 +212,8 @@ if st.session_state.order_wizard_active:
 
         elif step == 3:
             st.subheader("Step 3: Payment Method")
-            pay_mode = st.selectbox("Method", ["COD", "JazzCash", "EasyPaisa"])
-            st.write("COD ke ilawa baqi methods mein QR code aur number show hoga.")
+            pay_mode = st.selectbox("Method", ["JazzCash", "EasyPaisa", "COD"])
+            st.write("📌 *Note: Online payment ke liye confirmation zaroori hai.*")
             
             c1, c2 = st.columns(2)
             if c1.button("⬅️ Back"): st.session_state.step_number = 2; st.rerun()
@@ -237,37 +223,43 @@ if st.session_state.order_wizard_active:
                 st.rerun()
 
         elif step == 4:
-            st.subheader("Step 4: Payment Details")
+            st.subheader("Step 4: Secure Payment Verification")
             method = st.session_state.order_buffer['method']
             qr_path = JAZZCASH_QR if method == "JazzCash" else EASYPAISA_QR
             phone_path = JAZZCASH_NO if method == "JazzCash" else EASYPAISA_NO
             
             st.markdown(f"""
                 <div class="qr-container">
-                    <h4 style='color:#1e40af;'>Scan for {method}</h4>
-                    <img src="{qr_path}" width="220">
+                    <h4 style='color:#1e40af;'>Scan to Pay via {method}</h4>
+                    <img src="{qr_path}" width="200">
                     <h2 style="color:#1e40af; margin:15px 0;">Rs. {st.session_state.order_buffer['total']}</h2>
                     <div style="background:#f8fafc; padding:15px; border-radius:12px; border:1px solid #e2e8f0;">
-                        <small>Agar scan na ho to is number par bhejain:</small><br>
+                        <small>Account Number:</small><br>
                         <b style="font-size:20px;">{phone_path}</b>
                     </div>
                 </div>
             """, unsafe_allow_html=True)
             
+            st.write("📸 **Verify Transaction**")
+            proof = st.file_uploader("Upload Payment Screenshot", type=['jpg','png','jpeg'])
+            
             c1, c2 = st.columns(2)
             if c1.button("⬅️ Back"): st.session_state.step_number = 3; st.rerun()
-            if c2.button("Final Review 🔍"): st.session_state.step_number = 5; st.rerun()
+            if proof:
+                if c2.button("Final Review 🔍"): st.session_state.step_number = 5; st.rerun()
+            else:
+                st.warning("Please upload screenshot to proceed.")
 
         elif step == 5:
             st.subheader("Step 5: Review & Submit")
             data = st.session_state.order_buffer
             st.markdown(f"""
-                **Product Detail:** {data['prod']} ({data['size']})<br>
-                **Shade Selection:** {data['shade']}<br>
-                **Order Qty:** {data['qty']}<br>
+                **Product:** {data['prod']} ({data['size']})<br>
+                **Shade:** {data['shade']}<br>
+                **Qty:** {data['qty']}<br>
                 <hr>
                 <h3 style='color:#1e3a8a;'>Total: Rs. {data['total']}</h3>
-                **Payment via:** {data['method']}
+                **Payment:** {data['method']} (Receipt Uploaded)
             """, unsafe_allow_html=True)
             
             if st.button("Final Submit Order ✅", type="primary", use_container_width=True):
@@ -287,28 +279,35 @@ if st.session_state.show_success_msg:
     @st.dialog("✅ Order Recorded")
     def notify_success():
         st.success("Aapka order mehfooz kar liya gaya hai!")
-        st.info("Payment wasool hone ka intezar karein. Hamari team confirmation ke liye screenshot check karegi. Thanks!")
+        st.info("Hum jald hi aapki payment aur screenshot verify karke order process karenge. Shukriya!")
         if st.button("Ok, Go to Dashboard", use_container_width=True):
             st.session_state.show_success_msg = False
             change_screen("🏠 Dashboard")
     notify_success()
 
 # ========================================================
-# 8. MAIN DASHBOARD MODULE
+# 8. MAIN DASHBOARD MODULE (Updated with 4 Cards)
 # ========================================================
 if st.session_state.active_tab == "🏠 Dashboard":
     st.markdown(f"## 🏠 Factory Overview")
     user_orders = orders_db[orders_db['Phone'].apply(clean_phone) == u_phone]
-    spent = user_orders['Bill'].sum() if not user_orders.empty else 0
     
+    # Calculate Data for Cards
+    total_orders = len(user_orders)
+    pending_orders = len(user_orders[user_orders['Status'].str.contains('Pending|Process', case=False)])
+    complete_orders = len(user_orders[user_orders['Status'].str.contains('Paid|Complete', case=False)])
+    store_members = len(users_db)
+
     st.markdown(f'''
-        <div style="display: flex; gap: 20px; margin-bottom: 30px;">
-            <div class="card-blue"><small>TOTAL ORDERS</small><h3>{len(user_orders)}</h3></div>
-            <div class="card-green"><small>TOTAL SPENT</small><h3>Rs. {spent}</h3></div>
+        <div class="metric-container">
+            <div class="m-card c-total"><small>MY TOTAL ORDERS</small><h3>{total_orders}</h3></div>
+            <div class="m-card c-pending"><small>PENDING</small><h3>{pending_orders}</h3></div>
+            <div class="m-card c-complete"><small>COMPLETED</small><h3>{complete_orders}</h3></div>
+            <div class="m-card c-active"><small>STORE MEMBERS</small><h3>{store_members}</h3></div>
         </div>
     ''', unsafe_allow_html=True)
     
-    st.subheader("Recent Activity")
+    st.subheader("🕒 Recent Activity")
     if not user_orders.empty:
         for _, row in user_orders.tail(5).iloc[::-1].iterrows():
             st.markdown(f'''
@@ -320,12 +319,12 @@ if st.session_state.active_tab == "🏠 Dashboard":
     else: st.info("Abhi tak koi order nahi kiya gaya.")
 
 # ========================================================
-# 9. PROFILE & SECURITY (PASSWORD CHANGE)
+# 9. PROFILE & SECURITY
 # ========================================================
 elif st.session_state.active_tab == "👤 Profile":
     st.header("👤 Profile & Security")
     st.markdown(f'''
-        <div class="profile-card">
+        <div style="text-align:center; background:white; padding:40px; border-radius:30px; border:1px solid #e2e8f0;">
             <img src="{u_img}" style="width:160px; height:160px; border-radius:50%; object-fit:cover; border:5px solid #3b82f6; margin-bottom:20px;">
             <h2>{u_name}</h2>
             <p>Contact: {u_phone}</p>
@@ -334,7 +333,7 @@ elif st.session_state.active_tab == "👤 Profile":
     
     col1, col2 = st.columns(2)
     with col1:
-        with st.expander("🔐 Change Password", expanded=False):
+        with st.expander("🔐 Change Password"):
             old_p = st.text_input("Current Password", type="password")
             new_p = st.text_input("New Secure Password", type="password")
             if st.button("Confirm Password Change"):
@@ -353,7 +352,7 @@ elif st.session_state.active_tab == "👤 Profile":
                 st.success("Photo Updated!"); time.sleep(1); st.rerun()
 
 # ========================================================
-# 10. OTHER MODULES (HISTORY, ADMIN, FEEDBACK)
+# 10. OTHER MODULES
 # ========================================================
 elif st.session_state.active_tab == "📜 History":
     st.header("📜 Complete History")
